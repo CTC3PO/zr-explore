@@ -1,0 +1,29 @@
+# Next.js
+.next/
+out/
+build/
+
+# Production
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Env files
+.env*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project Specific
+_progress files/
+data/vector_store/
+scripts/*.ts
+!scripts/ingest_vector_db.ts
+!scripts/test_benchmark.ts
+
+# Vercel
+.vercel
