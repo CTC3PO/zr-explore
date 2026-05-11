@@ -170,16 +170,48 @@ export default function Sidebar() {
         ) : (
           <div className="space-y-6">
             {/* Header info - Always visible when lot is selected */}
-            <div className="space-y-1">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tax Lot</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tax Lot Portfolio</span>
                 <span className="text-[10px] font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 font-bold">
-                  {selectedBBL}
+                  B{lotData?.taxData?.borough} L{lotData?.taxData?.block} B{lotData?.taxData?.lot}
                 </span>
               </div>
-              <h2 className="text-base font-bold text-slate-800 leading-tight">
-                {lotData?.address || `Tax Lot ${selectedBBL}`}
-              </h2>
+              <div className="space-y-1">
+                <h2 className="text-xl font-bold text-slate-800 leading-tight">
+                  {lotData?.address || `Tax Lot ${selectedBBL}`}
+                </h2>
+                <div className="flex gap-2">
+                  {lotData?.zoningDistricts?.map((d: string) => (
+                    <span key={d} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200">
+                      District {d}
+                    </span>
+                  ))}
+                  {lotData?.specialDistricts?.length > 0 && (
+                    <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold border border-amber-100">
+                      Special {lotData.specialDistricts[0]}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* QUICK DASHBOARD */}
+            <div className="grid grid-cols-3 gap-2 py-4 border-y border-slate-100">
+              <div className="space-y-1">
+                <p className="text-[9px] font-bold text-slate-400 uppercase">Built FAR</p>
+                <p className="text-sm font-bold text-slate-700">{lotData?.metadata?.builtFAR}</p>
+              </div>
+              <div className="space-y-1 text-center">
+                <p className="text-[9px] font-bold text-slate-400 uppercase">Max Res FAR</p>
+                <p className="text-sm font-bold text-slate-700">{lotData?.metadata?.maxResidFAR || "N/A"}</p>
+              </div>
+              <div className="space-y-1 text-right">
+                <p className="text-[9px] font-bold text-slate-400 uppercase">Utilization</p>
+                <p className={`text-sm font-bold ${parseFloat(lotData?.metadata?.builtFAR) > parseFloat(lotData?.metadata?.maxResidFAR) ? 'text-red-600' : 'text-emerald-600'}`}>
+                  {lotData?.metadata?.maxResidFAR ? Math.round((parseFloat(lotData.metadata.builtFAR) / parseFloat(lotData.metadata.maxResidFAR)) * 100) : 0}%
+                </p>
+              </div>
             </div>
 
             {/* TAB: EXPLORER */}
@@ -189,19 +221,12 @@ export default function Sidebar() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-slate-800 font-bold text-xs">
                       <BookOpen size={14} className="text-blue-600" />
-                      <span>District Profile</span>
-                    </div>
-                    <div className="flex gap-1">
-                      {lotData?.zoningDistricts?.map((d: string) => (
-                        <span key={d} className="bg-blue-600 text-white px-2 py-0.5 rounded text-[10px] font-bold">
-                          {d}
-                        </span>
-                      )) || "N/A"}
+                      <span>Physical Attributes</span>
                     </div>
                   </div>
                   
                   {lotData?.metadata && (
-                    <div className="grid grid-cols-2 gap-3 py-3 border-y border-slate-100">
+                    <div className="grid grid-cols-2 gap-3 py-3 border-t border-slate-50">
                       <div className="space-y-0.5">
                         <p className="text-[9px] font-bold text-slate-400 uppercase">Existing Floors</p>
                         <p className="text-sm font-bold text-slate-700">{lotData.metadata.floors}</p>
@@ -244,6 +269,33 @@ export default function Sidebar() {
                     <div className="bg-emerald-500 h-full w-[40%]" />
                   </div>
                   <p className="text-[8px] text-emerald-600 italic font-medium">Underutilized: 60% of legal FAR remaining</p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-slate-800 font-bold text-xs px-1">
+                    <BookOpen size={14} className="text-blue-600" />
+                    <span>Relevant Rules & Chapters</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {lotData?.zoningDistricts?.some((d: string) => d.startsWith('R')) && (
+                      <div className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600">
+                        <span>Residence District Regulations</span>
+                        <span className="text-slate-400">Art. II, Ch. 3</span>
+                      </div>
+                    )}
+                    {lotData?.zoningDistricts?.some((d: string) => d.startsWith('M')) && (
+                      <div className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600">
+                        <span>Manufacturing District Rules</span>
+                        <span className="text-slate-400">Art. IV, Ch. 2</span>
+                      </div>
+                    )}
+                    {lotData?.specialDistricts?.length > 0 && (
+                      <div className="flex items-center justify-between p-2 bg-blue-50 border border-blue-100 rounded-lg text-[10px] font-bold text-blue-700">
+                        <span>Special District {lotData.specialDistricts[0]}</span>
+                        <span className="text-blue-400">Art. X-XII</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -288,6 +340,46 @@ export default function Sidebar() {
                         </button>
                       </div>
                     ))}
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100 space-y-2 relative z-10">
+                    <p className="text-[8px] text-slate-400 uppercase font-bold mb-1">Scenario Templates</p>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => {
+                          const area = Math.round((lotData?.metadata?.lotArea || 2000) * 0.8);
+                          setFloorsList([{ id: 1, area }, { id: 2, area }, { id: 3, area }]);
+                          setApplyFresh(false);
+                          setApplyTransit(false);
+                        }}
+                        className="flex-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 px-2 py-1.5 rounded text-[9px] font-bold transition-all"
+                      >
+                        Townhouse
+                      </button>
+                      <button 
+                        onClick={() => {
+                          const area = Math.round((lotData?.metadata?.lotArea || 2000) * 0.6);
+                          const newFloors = Array.from({length: 6}, (_, i) => ({ id: Date.now() + i, area }));
+                          setFloorsList(newFloors);
+                          setApplyTransit(true);
+                        }}
+                        className="flex-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 px-2 py-1.5 rounded text-[9px] font-bold transition-all"
+                      >
+                        Mid-Rise
+                      </button>
+                      <button 
+                        onClick={() => {
+                          const area = Math.round((lotData?.metadata?.lotArea || 2000) * 0.5);
+                          const newFloors = Array.from({length: 12}, (_, i) => ({ id: Date.now() + i, area }));
+                          setFloorsList(newFloors);
+                          setApplyFresh(true);
+                          setApplyTransit(true);
+                        }}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-2 py-1.5 rounded text-[9px] font-bold transition-all shadow-md"
+                      >
+                        MIH High-Rise
+                      </button>
+                    </div>
                   </div>
 
                   <div className="pt-3 border-t border-slate-100 space-y-2 relative z-10">
