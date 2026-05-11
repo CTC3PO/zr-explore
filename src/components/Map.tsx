@@ -6,7 +6,11 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useZoning } from "@/context/ZoningContext";
 
 export default function Map() {
-  const { selectedBBL, setSelectedBBL } = useZoning();
+  const { 
+    selectedBBL, setSelectedBBL, 
+    floorsList, setFloorsList,
+    mapMode, setMapMode 
+  } = useZoning();
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [lng, setLng] = useState(-73.985); 
@@ -47,7 +51,10 @@ export default function Map() {
       console.log("MapLibre loaded successfully");
       map.current?.resize();
 
-      // Add NYC Zoning Districts Layer (Live from NYC Planning)
+      // Add 3D Buildings context layer (Optional NYC footprints if available)
+      // For now, focus on the selected lot extrusion
+      
+      // Add NYC Zoning Districts Layer
       map.current?.addSource('zoning-districts', {
         type: 'raster',
         tiles: [
@@ -63,13 +70,12 @@ export default function Map() {
         paint: { 'raster-opacity': 0.4 }
       });
 
-      // Add Global Tax Lots (Vector) for Interactivity
+      // Add Global Tax Lots (Vector)
       map.current?.addSource('tax-lots', {
         type: 'vector',
-        tiles: ['https://tiles.arcgis.com/tiles/yG5s3afENB5iO9Jp/arcgis/rest/services/TaxLot/VectorTileServer/tile/{z}/{y}/{x}.pbf']
+        tiles: ['https://tiles.arcgis.com/tiles/yG5s3afENB5iO9Jp/arcgis/rest/services/NYC_Zoning_and_Land_Use/VectorTileServer/tile/{z}/{y}/{x}.pbf']
       });
 
-      // Hover Layer (Ghost Highlight)
       map.current?.addLayer({
         id: 'tax-lots-hover',
         type: 'fill',
@@ -80,13 +86,13 @@ export default function Map() {
           'fill-opacity': [
             'case',
             ['boolean', ['feature-state', 'hover'], false],
-            0.2,
+            0.1,
             0
           ]
         }
       });
 
-      // Add Highlight Source for Selected Lot
+      // Selected Lot Highlight
       map.current?.addSource('selected-lot', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] }
@@ -98,8 +104,21 @@ export default function Map() {
         source: 'selected-lot',
         paint: {
           'fill-color': '#2563eb',
-          'fill-opacity': 0.5,
+          'fill-opacity': 0.3,
           'fill-outline-color': '#1d4ed8'
+        }
+      });
+
+      // PROPOSED 3D EXTRUSION LAYER
+      map.current?.addLayer({
+        id: 'proposed-building',
+        type: 'fill-extrusion',
+        source: 'selected-lot',
+        paint: {
+          'fill-extrusion-color': '#3b82f6',
+          'fill-extrusion-height': 0,
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 0.85
         }
       });
     });
@@ -154,6 +173,9 @@ export default function Map() {
     });
 
     map.current.on("error", (e) => {
+      if (e.error?.message?.includes("Unable to parse the tile") || e.error?.message?.includes("Unimplemented type: 3")) {
+        return;
+      }
       console.error("MapLibre error:", e.error);
     });
 
@@ -161,6 +183,26 @@ export default function Map() {
       map.current?.remove();
     };
   }, []);
+
+  // Update Extrusion Height and Colors
+  useEffect(() => {
+    if (!map.current || !selectedBBL) return;
+
+    const height = floorsList.length * 3.5; // 3.5m per floor
+    if (map.current.getLayer('proposed-building')) {
+      map.current.setPaintProperty('proposed-building', 'fill-extrusion-height', height);
+    }
+  }, [floorsList, selectedBBL]);
+
+  // Handle 2D/3D Mode
+  useEffect(() => {
+    if (!map.current) return;
+    if (mapMode === "3D") {
+      map.current.easeTo({ pitch: 55, bearing: -15, duration: 1000 });
+    } else {
+      map.current.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
+    }
+  }, [mapMode]);
 
   useEffect(() => {
     if (!map.current || !selectedBBL) return;
@@ -194,6 +236,18 @@ export default function Map() {
   return (
     <div className="h-full w-full relative bg-slate-100 overflow-hidden">
       <div ref={mapContainer} className="absolute inset-0" style={{ height: '100%', width: '100%' }} />
+      
+      {/* MAP CONTROLS */}
+      <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-10">
+        <button 
+          onClick={() => setMapMode(mapMode === '2D' ? '3D' : '2D')}
+          className="bg-white/95 backdrop-blur px-4 py-2 rounded-xl shadow-xl text-[10px] font-black text-blue-600 border border-slate-200 hover:bg-white transition-all active:scale-95 uppercase tracking-widest flex items-center gap-2"
+        >
+          <div className={`w-2 h-2 rounded-full ${mapMode === '3D' ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-slate-300'}`} />
+          {mapMode} Mode
+        </button>
+      </div>
+
       <div className="absolute top-4 right-4 bg-white/95 backdrop-blur px-3 py-1.5 rounded-full shadow-lg text-[10px] font-bold text-slate-600 z-10 border border-slate-200 pointer-events-none">
         Click map to consult a lot
       </div>

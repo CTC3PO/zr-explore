@@ -34,7 +34,7 @@ async function callGeminiRaw(prompt: string, modelName: string, apiKey: string) 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 2048, temperature: 0.1 }
+      generationConfig: { maxOutputTokens: 4096, temperature: 0.1 }
     })
   });
   
@@ -50,9 +50,7 @@ async function callGeminiRaw(prompt: string, modelName: string, apiKey: string) 
 export async function POST(request: Request) {
   try {
     const { message, zoningDistricts } = await request.json();
-    if (!zoningDistricts || zoningDistricts.length === 0) {
-      return NextResponse.json({ error: "Zoning districts are required" }, { status: 400 });
-    }
+    const districts = zoningDistricts || [];
 
     const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim();
     if (!googleKey) return NextResponse.json({ error: "No Google AI API key found." }, { status: 500 });
@@ -61,7 +59,7 @@ export async function POST(request: Request) {
     let context = "";
 
     if (store) {
-      const query = `${zoningDistricts.join(", ")} ${message || "zoning regulations"}`;
+      const query = `${districts.join(", ")} ${message || "zoning regulations"}`;
       const results = await store.similaritySearch(query, 10);
       context = results.map(r => r.pageContent).join("\n\n---\n\n");
     } else {
@@ -69,15 +67,15 @@ export async function POST(request: Request) {
     }
 
     const prompt = `
-      You are the "NYC Zoning Consultant Agent". Your goal is to help an average property owner or potential developer understand their lot's potential. 
+      You are the "NYC Zoning Consultant Agent". Your goal is to help an average property owner or potential developer understand their lot's potential or generic NYC zoning rules. 
       Unlike ZoLa (which just shows data), you provide actionable insights and explain the "Why" and "How".
       
-      Lot Zoning Districts: ${zoningDistricts.join(", ")}
+      ${districts.length > 0 ? `Target Zoning Districts: ${districts.join(", ")}` : "Topic: General NYC Zoning Regulations"}
       
       CONTEXT FROM ZONING RESOLUTION:
       ${context}
       
-      USER QUESTION: ${message || "Please provide a 'Discovery Summary' for this lot."}
+      USER QUESTION: ${message || "Please provide a 'Discovery Summary' for the selected districts or general NYC zoning."}
       
       CONSULTANT GUIDELINES:
       1. SIMPLIFY: Explain terms like FAR, Setbacks, and Use Groups in simple English.
@@ -85,6 +83,7 @@ export async function POST(request: Request) {
       3. CITATIONS: Cite specific Section numbers (e.g., Section 23-145) from the context provided.
       4. FORMATTING: Use bold headers and clean bullet points.
       5. LIMITS: Always remind the user to consult a professional for a final Zoning Analysis.
+      6. FOLLOW-UPS: At the very end of your response, provide exactly 3 follow-up questions the user might ask next. Format them as a JSON array at the end of the text like this: [FOLLOW_UPS: ["Question 1?", "Question 2?", "Question 3?"]]
     `;
 
     try {
