@@ -17,16 +17,18 @@ async function getVectorStore(apiKey: string) {
   });
 
   try {
+    console.log("📂 Loading vector store from:", vectorStorePath);
     vectorStore = await HNSWLib.load(vectorStorePath, embeddings);
+    console.log("✅ Vector store loaded successfully.");
     return vectorStore;
   } catch (error) {
-    console.error("Failed to load vector store:", error);
+    console.error("❌ Failed to load vector store:", error);
     return null;
   }
 }
 
 async function callGeminiRaw(prompt: string, modelName: string, apiKey: string) {
-  const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -86,12 +88,17 @@ export async function POST(request: Request) {
     `;
 
     try {
-      const text = await callGeminiRaw(prompt, "gemini-2.0-flash", googleKey);
+      const text = await callGeminiRaw(prompt, "gemini-2.5-flash", googleKey);
       return NextResponse.json({ response: text });
     } catch (e) {
-      console.warn("Gemini 2.0 Flash failed, falling back to 1.5 Flash...");
-      const text = await callGeminiRaw(prompt, "gemini-1.5-flash", googleKey);
-      return NextResponse.json({ response: text });
+      console.warn("Gemini 2.5 Flash failed, falling back to 1.5 Flash (if available)...");
+      try {
+        const text = await callGeminiRaw(prompt, "gemini-1.5-flash", googleKey);
+        return NextResponse.json({ response: text });
+      } catch (e2) {
+        const text = await callGeminiRaw(prompt, "gemini-2.0-flash", googleKey);
+        return NextResponse.json({ response: text });
+      }
     }
   } catch (error: any) {
     console.error("Chat error:", error);
