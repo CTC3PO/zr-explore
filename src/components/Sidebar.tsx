@@ -70,8 +70,8 @@ export default function Sidebar() {
         if (data.metadata?.lotArea) {
           const suggestedArea = Math.round(data.metadata.lotArea * 0.6);
           setFloorsList([
-            { id: 1, area: suggestedArea },
-            { id: 2, area: suggestedArea }
+            { id: 1, area: suggestedArea, use: 'residential' },
+            { id: 2, area: suggestedArea, use: 'residential' }
           ]);
         }
       } catch (error: any) {
