@@ -1,5 +1,5 @@
 {
-  "name": "nyc-zoning-navigator",
+  "name": "zr-explore",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -14,7 +14,7 @@
     "@langchain/google-genai": "^2.1.30",
     "@langchain/openai": "^1.4.5",
     "clsx": "^2.1.1",
-    "dotenv": "^17.4.2",
+    "dotenv": "^16.4.7",
     "hnswlib-node": "^3.0.0",
     "langchain": "^1.4.0",
     "lucide-react": "^1.14.0",
