@@ -8,6 +8,8 @@ import { useZoning } from "@/context/ZoningContext";
 export default function Map() {
   const { 
     selectedBBL, setSelectedBBL, 
+    lotData,
+    lotGeometry, setLotGeometry,
     floorsList, setFloorsList,
     mapMode, setMapMode 
   } = useZoning();
@@ -110,15 +112,37 @@ export default function Map() {
       });
 
       // PROPOSED 3D EXTRUSION LAYER
+      map.current?.addSource('proposed-building-source', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
       map.current?.addLayer({
         id: 'proposed-building',
         type: 'fill-extrusion',
-        source: 'selected-lot',
+        source: 'proposed-building-source',
         paint: {
-          'fill-extrusion-color': '#3b82f6',
-          'fill-extrusion-height': 0,
-          'fill-extrusion-base': 0,
-          'fill-extrusion-opacity': 0.85
+          'fill-extrusion-color': ['get', 'color'],
+          'fill-extrusion-height': ['get', 'height'],
+          'fill-extrusion-base': ['get', 'base_height'],
+          'fill-extrusion-opacity': 0.95
+        }
+      });
+
+      // ENVELOPE LAYER (THEORETICAL MAX)
+      map.current?.addSource('building-envelope-source', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
+      map.current?.addLayer({
+        id: 'building-envelope',
+        type: 'fill-extrusion',
+        source: 'building-envelope-source',
+        paint: {
+          'fill-extrusion-color': '#06b6d4',
+          'fill-extrusion-height': ['get', 'height'],
+          'fill-extrusion-opacity': 0.15
         }
       });
     });
@@ -184,23 +208,76 @@ export default function Map() {
     };
   }, []);
 
-  // Update Extrusion Height and Colors
+  // Generate Stacked 3D Building Extrusion
   useEffect(() => {
-    if (!map.current || !selectedBBL) return;
+    if (!map.current || !lotGeometry) return;
 
-    const height = floorsList.length * 3.5; // 3.5m per floor
-    if (map.current.getLayer('proposed-building')) {
-      map.current.setPaintProperty('proposed-building', 'fill-extrusion-height', height);
+    const features = floorsList.map((floor, index) => {
+      const baseHeight = index * 3.5; // 3.5m per floor
+      const height = (index + 1) * 3.5;
+      let color = '#facc15'; // residential (yellow-400)
+      if (floor.use === 'commercial') color = '#ef4444'; // red-500
+      if (floor.use === 'community_facility') color = '#3b82f6'; // blue-500
+      
+      return {
+        type: "Feature",
+        geometry: lotGeometry,
+        properties: {
+          base_height: baseHeight,
+          height: height,
+          color: color
+        }
+      };
+    });
+
+    const source = map.current.getSource("proposed-building-source") as maplibregl.GeoJSONSource;
+    if (source) {
+      source.setData({
+        type: "FeatureCollection",
+        features: features as any
+      });
     }
-  }, [floorsList, selectedBBL]);
+
+    // Generate Envelope
+    const maxFAR = parseFloat(lotData?.metadata?.maxResidFAR || lotData?.metadata?.maxCommFAR || "0");
+    if (maxFAR > 0) {
+      // Approximate max height assuming ~60% lot coverage
+      const envelopeHeight = (maxFAR / 0.6) * 3.5; 
+      const envelopeFeature = {
+        type: "Feature",
+        geometry: lotGeometry,
+        properties: { height: envelopeHeight }
+      };
+      
+      const envSource = map.current.getSource("building-envelope-source") as maplibregl.GeoJSONSource;
+      if (envSource) {
+        envSource.setData({
+          type: "FeatureCollection",
+          features: [envelopeFeature as any]
+        });
+      }
+    }
+  }, [floorsList, lotGeometry, lotData]);
 
   // Handle 2D/3D Mode
   useEffect(() => {
     if (!map.current) return;
     if (mapMode === "3D") {
       map.current.easeTo({ pitch: 55, bearing: -15, duration: 1000 });
+      if (map.current.getLayer('proposed-building')) {
+        map.current.setLayoutProperty('proposed-building', 'visibility', 'visible');
+      }
+      if (map.current.getLayer('building-envelope')) {
+        map.current.setLayoutProperty('building-envelope', 'visibility', 'visible');
+      }
     } else {
       map.current.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
+      if (map.current.getLayer('proposed-building')) {
+        map.current.setLayoutProperty('proposed-building', 'visibility', 'none');
+      }
+      if (map.current.getLayer('building-envelope')) {
+        map.current.setLayoutProperty('building-envelope', 'visibility', 'none');
+      }
     }
   }, [mapMode]);
 
@@ -215,6 +292,8 @@ export default function Map() {
 
         if (data.rows && data.rows.length > 0) {
           const geojson = JSON.parse(data.rows[0].geom);
+          setLotGeometry(geojson); // Store geometry for 3D extrusion
+
           const source = map.current?.getSource("selected-lot") as maplibregl.GeoJSONSource;
           if (source) {
             source.setData({

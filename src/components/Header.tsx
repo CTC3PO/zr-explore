@@ -1,7 +1,7 @@
 "use client";
 
 import { useZoning } from "@/context/ZoningContext";
-import { Map as MapIcon, Plus, BookOpen, Search } from "lucide-react";
+import { Map as MapIcon, Plus, BookOpen, Search, Grid } from "lucide-react";
 
 export default function Header() {
   const { activeTab, setActiveTab, selectedBBL } = useZoning();
@@ -9,7 +9,8 @@ export default function Header() {
   const tabs = [
     { id: 'explorer', label: 'Explorer', icon: MapIcon },
     { id: 'builder', label: 'Builder', icon: Plus },
-    { id: 'chat', label: 'AI Chat', icon: BookOpen }
+    { id: 'chat', label: 'AI Chat', icon: BookOpen },
+    { id: 'matrix', label: 'Matrix', icon: Grid }
   ];
 
   return (

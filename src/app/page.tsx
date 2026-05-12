@@ -4,11 +4,12 @@ import { useState } from "react";
 import Map from "@/components/Map";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
-import { Menu, X, ChevronUp, ChevronDown } from "lucide-react";
+import { Menu, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useZoning } from "@/context/ZoningContext";
 
 export default function Home() {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isDesktopExpanded, setIsDesktopExpanded] = useState(false);
   const { selectedBBL } = useZoning();
 
   return (
@@ -18,7 +19,8 @@ export default function Home() {
       {/* DESKTOP SIDEBAR / MOBILE BOTTOM PANEL */}
       <div className={`
         fixed bottom-0 left-0 right-0 z-40 transition-all duration-500 ease-in-out bg-white shadow-[0_-8px_30px_rgb(0,0,0,0.08)]
-        md:relative md:translate-x-0 md:h-full md:w-96 md:shadow-none md:border-r md:border-slate-200
+        md:relative md:translate-x-0 md:h-full md:shadow-none md:border-r md:border-slate-200
+        ${isDesktopExpanded ? 'md:w-[500px]' : 'md:w-96'}
         ${isExpanded ? 'h-[90vh]' : 'h-[45vh]'} 
         ${!selectedBBL ? 'translate-y-full md:translate-y-0' : 'translate-y-0'}
         md:flex md:flex-col
@@ -34,6 +36,15 @@ export default function Home() {
         <div className="flex-1 overflow-hidden">
           <Sidebar />
         </div>
+
+        {/* Desktop Expand Handle */}
+        <button
+          onClick={() => setIsDesktopExpanded(!isDesktopExpanded)}
+          className="hidden md:flex absolute top-1/2 -right-3.5 z-50 bg-white border border-slate-200 rounded-full p-1.5 shadow-md hover:bg-slate-50 transition-transform hover:scale-110 -translate-y-1/2 text-slate-400"
+          title={isDesktopExpanded ? "Collapse Panel" : "Expand Panel"}
+        >
+          {isDesktopExpanded ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+        </button>
       </div>
 
       {/* MAP AREA */}

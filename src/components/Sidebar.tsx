@@ -5,6 +5,9 @@ import { useZoning } from "@/context/ZoningContext";
 import { Info, Map as MapIcon, BookOpen, ChevronRight, Loader2, Plus, ArrowRight, Search } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import MassingPreview from "./MassingPreview";
+import ScratchPad from "./ScratchPad";
+import { GlossaryTooltip } from "./GlossaryTooltip";
+import { UseGroupMatrix } from "./UseGroupMatrix";
 
 export default function Sidebar() {
   const { 
@@ -18,6 +21,7 @@ export default function Sidebar() {
   const [loading, setLoading] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [activeScratchFloor, setActiveScratchFloor] = useState<number | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [question, setQuestion] = useState("");
   const [applyFresh, setApplyFresh] = useState(false);
@@ -37,13 +41,14 @@ export default function Sidebar() {
     setFloorsList(floorsList.map(f => f.id === id ? { ...f, area } : f));
   };
 
-  const updateFloorUse = (id: number, use: 'residential' | 'commercial') => {
+  const updateFloorUse = (id: number, use: 'residential' | 'commercial' | 'community_facility') => {
     setFloorsList(floorsList.map(f => f.id === id ? { ...f, use } : f));
   };
 
   const totalBuildArea = floorsList.reduce((sum, f) => sum + f.area, 0);
   const totalResidArea = floorsList.filter(f => f.use === 'residential').reduce((sum, f) => sum + f.area, 0);
   const totalCommArea = floorsList.filter(f => f.use === 'commercial').reduce((sum, f) => sum + f.area, 0);
+  const totalCFArea = floorsList.filter(f => f.use === 'community_facility').reduce((sum, f) => sum + f.area, 0);
   
   const calculatedFAR = lotData?.metadata?.lotArea ? (totalBuildArea / lotData.metadata.lotArea).toFixed(2) : "0.00";
 
@@ -56,6 +61,7 @@ export default function Sidebar() {
       setLotData(null);
       return;
     }
+    setActiveTab('explorer');
 
     const fetchData = async () => {
       setLoading(true);
@@ -190,6 +196,14 @@ export default function Sidebar() {
     if (d.startsWith('C')) return "https://zr.planning.nyc.gov/article-iii/chapter-2";
     if (d.startsWith('M')) return "https://zr.planning.nyc.gov/article-iv/chapter-2";
     return "https://zr.planning.nyc.gov/";
+  };
+
+  const getBisLink = (bbl: string) => {
+    if (!bbl || bbl.length !== 10) return "https://a810-bisweb.nyc.gov/bisweb/bispi00.jsp";
+    const boro = bbl.substring(0, 1);
+    const block = parseInt(bbl.substring(1, 6), 10);
+    const lot = parseInt(bbl.substring(6, 10), 10);
+    return `https://a810-bisweb.nyc.gov/bisweb/PropertyProfileOverviewServlet?boro=${boro}&block=${block}&lot=${lot}`;
   };
 
   return (
@@ -338,25 +352,27 @@ export default function Sidebar() {
             ) : (
               <div className="p-4 space-y-6">
                 {/* Header info - Always visible when lot is selected */}
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tax Lot Portfolio</span>
-                    <span className="text-[10px] font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 font-bold">
-                      B{lotData?.taxData?.borough} L{lotData?.taxData?.block} B{lotData?.taxData?.lot}
-                    </span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax Lot Portfolio</span>
+                    <GlossaryTooltip termId="bbl">
+                      <span className="text-[10px] font-mono bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md border border-blue-200 font-bold shadow-sm cursor-help">
+                        B{lotData?.taxData?.borough} L{lotData?.taxData?.block} B{lotData?.taxData?.lot}
+                      </span>
+                    </GlossaryTooltip>
                   </div>
-                  <div className="space-y-1">
-                    <h2 className="text-xl font-bold text-slate-800 leading-tight">
+                  <div className="space-y-2">
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-none">
                       {lotData?.address || `Tax Lot ${selectedBBL}`}
                     </h2>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2 pt-1">
                       {lotData?.zoningDistricts?.map((d: string) => (
-                        <span key={d} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200">
-                          District {d}
+                        <span key={d} className="bg-slate-800 text-white px-2.5 py-1 rounded-md text-xs font-bold shadow-sm border border-slate-900">
+                          {d}
                         </span>
                       ))}
                       {lotData?.specialDistricts?.length > 0 && (
-                        <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold border border-amber-100">
+                        <span className="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-md text-xs font-bold border border-amber-200 shadow-sm">
                           Special {lotData.specialDistricts[0]}
                         </span>
                       )}
@@ -365,23 +381,27 @@ export default function Sidebar() {
                 </div>
 
                 {/* QUICK DASHBOARD */}
-                <div className="grid grid-cols-3 gap-2 py-4 border-y border-slate-100">
-                  <div className="space-y-1">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase">Built FAR</p>
-                    <p className="text-sm font-bold text-slate-700">{lotData?.metadata?.builtFAR}</p>
+                <div className="grid grid-cols-3 gap-3 py-5 border-y border-slate-200">
+                  <div className="space-y-1 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                    <GlossaryTooltip termId="far">
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider inline-flex">Built FAR</p>
+                    </GlossaryTooltip>
+                    <p className="text-base font-black text-slate-800">{lotData?.metadata?.builtFAR}</p>
                   </div>
-                  <div className="space-y-1 text-center">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase">Max Res FAR</p>
+                  <div className="space-y-1 bg-blue-50/50 p-2 rounded-lg border border-blue-100/50 text-center">
+                    <GlossaryTooltip termId="far">
+                      <p className="text-[9px] font-black text-blue-500 uppercase tracking-wider inline-flex">Max Res FAR</p>
+                    </GlossaryTooltip>
                     <div className="flex flex-col items-center">
-                      <p className="text-sm font-bold text-slate-700">{lotData?.metadata?.maxResidFAR || "N/A"}</p>
+                      <p className="text-base font-black text-blue-700">{lotData?.metadata?.maxResidFAR || "N/A"}</p>
                       {lotData?.metadata?.maxResidFAR && (
-                        <p className="text-[8px] text-blue-500 font-medium">({(parseFloat(lotData.metadata.maxResidFAR) * 1.2).toFixed(2)} w/ MIH)</p>
+                        <p className="text-[8px] text-blue-500 font-bold tracking-tighter">({(parseFloat(lotData.metadata.maxResidFAR) * 1.2).toFixed(2)} w/ MIH)</p>
                       )}
                     </div>
                   </div>
-                  <div className="space-y-1 text-right">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase">Utilization</p>
-                    <p className={`text-sm font-bold ${parseFloat(lotData?.metadata?.builtFAR) > parseFloat(lotData?.metadata?.maxResidFAR) ? 'text-red-600' : 'text-emerald-600'}`}>
+                  <div className={`space-y-1 p-2 rounded-lg border text-right ${parseFloat(lotData?.metadata?.builtFAR) > parseFloat(lotData?.metadata?.maxResidFAR) ? 'bg-red-50 border-red-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                    <p className={`text-[9px] font-black uppercase tracking-wider ${parseFloat(lotData?.metadata?.builtFAR) > parseFloat(lotData?.metadata?.maxResidFAR) ? 'text-red-500' : 'text-emerald-600'}`}>Utilization</p>
+                    <p className={`text-base font-black ${parseFloat(lotData?.metadata?.builtFAR) > parseFloat(lotData?.metadata?.maxResidFAR) ? 'text-red-700' : 'text-emerald-700'}`}>
                       {lotData?.metadata?.maxResidFAR ? Math.round((parseFloat(lotData.metadata.builtFAR) / parseFloat(lotData.metadata.maxResidFAR)) * 100) : 0}%
                     </p>
                   </div>
@@ -484,24 +504,33 @@ export default function Sidebar() {
                         <span>Construction & Permits</span>
                       </div>
                       <div className="p-4 bg-white border border-slate-100 rounded-xl shadow-sm space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase">Recent DOB Filings</p>
-                          <a 
-                            href={`https://a810-dobnow.nyc.gov/unregistered/#!/search?searchType=property&bbl=${selectedBBL}`} 
-                            target="_blank" 
-                            className="text-[9px] bg-amber-50 text-amber-700 px-2 py-1 rounded border border-amber-100 font-bold hover:bg-amber-100 transition-colors"
-                          >
-                            OPEN DOB NOW ↗
-                          </a>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-[10px]">
-                            <span className="text-slate-500">Active Permits</span>
-                            <span className="font-bold text-slate-700">Checking...</span>
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">Property Profile (BIS)</p>
+                            <a 
+                              href={getBisLink(selectedBBL)} 
+                              target="_blank" 
+                              className="text-[9px] bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100 font-bold hover:bg-blue-100 transition-colors"
+                            >
+                              OPEN BIS ↗
+                            </a>
                           </div>
-                          <p className="text-[9px] text-slate-400 italic leading-relaxed">
-                            Deep-linking to the Department of Buildings for real-time compliance and job status tracking.
-                          </p>
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">DOB NOW Portal</p>
+                            <a 
+                              href="https://a810-dobnow.nyc.gov/PublicPortal/index.html" 
+                              target="_blank" 
+                              className="text-[9px] bg-amber-50 text-amber-700 px-2 py-1 rounded border border-amber-100 font-bold hover:bg-amber-100 transition-colors"
+                            >
+                              OPEN DOB NOW ↗
+                            </a>
+                          </div>
+                        </div>
+                        <div className="space-y-2 pt-2">
+                          <div className="flex flex-col text-[9px] text-slate-400 italic leading-relaxed bg-slate-50 p-2 rounded-lg">
+                            <p className="mb-1 text-slate-500 font-bold">Status: Using External Portals</p>
+                            <p>DOB NOW manages UI state internally, preventing direct BBL links. Use the BIS link above for historical property profiles, or search BBL <span className="font-mono text-slate-600 bg-slate-200 px-1 rounded">{selectedBBL}</span> manually on DOB NOW.</p>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -565,45 +594,51 @@ export default function Sidebar() {
                           <Plus size={16} />
                         </button>
                       </div>
-                      
-                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1 relative z-10 custom-scrollbar scroll-smooth">
+                                         <div className="space-y-2 max-h-72 overflow-y-auto pr-1 relative z-10 custom-scrollbar scroll-smooth">
                         {floorsList.map((floor, index) => (
-                          <div key={floor.id} className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-100 group transition-all hover:border-blue-200 hover:shadow-sm">
-                            <div className="flex flex-col items-center justify-center w-7 h-7 bg-slate-50 rounded-lg border border-slate-100 group-hover:bg-blue-50 transition-colors">
-                              <span className="text-[9px] font-black text-slate-400 group-hover:text-blue-500">{index + 1}</span>
-                            </div>
-                            
-                            <div className="flex-1 flex items-center gap-2">
-                              <input 
-                                type="number"
-                                value={floor.area}
-                                onChange={(e) => updateFloorArea(floor.id, parseInt(e.target.value) || 0)}
-                                className="w-16 bg-transparent text-xs font-bold text-slate-700 border-none focus:ring-0 p-0"
-                              />
-                              <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter">sq ft</span>
-                            </div>
+                          <div key={floor.id} className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-slate-100 group transition-all hover:border-blue-200 hover:shadow-sm">
+                              <div className="flex flex-col items-center justify-center w-7 h-7 bg-slate-50 rounded-lg border border-slate-100 group-hover:bg-blue-50 transition-colors">
+                                <span className="text-[9px] font-black text-slate-400 group-hover:text-blue-500">{index + 1}</span>
+                              </div>
+                              
+                              <div className="flex-1 flex items-center gap-2">
+                                <input 
+                                  type="number"
+                                  value={floor.area}
+                                  onChange={(e) => updateFloorArea(floor.id, parseInt(e.target.value) || 0)}
+                                  className="w-16 bg-transparent text-xs font-bold text-slate-700 border-none focus:ring-0 p-0"
+                                />
+                                <span className="text-[10px] text-slate-400 font-medium">sqft</span>
+                              </div>
 
-                            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                              <button 
-                                onClick={() => updateFloorUse(floor.id, 'residential')}
-                                className={`px-2 py-1 rounded-md text-[8px] font-black uppercase transition-all ${floor.use === 'residential' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                              >
-                                Resid
-                              </button>
-                              <button 
-                                onClick={() => updateFloorUse(floor.id, 'commercial')}
-                                className={`px-2 py-1 rounded-md text-[8px] font-black uppercase transition-all ${floor.use === 'commercial' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                              >
-                                Comm
-                              </button>
+                              <div className="flex gap-1.5 items-center">
+                                <button 
+                                  onClick={() => setActiveScratchFloor(activeScratchFloor === floor.id ? null : floor.id)}
+                                  className={`text-[9px] font-bold px-2 py-1 rounded transition-colors ${activeScratchFloor === floor.id ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                                >
+                                  SKETCH
+                                </button>
+                                <select 
+                                  value={floor.use}
+                                  onChange={(e) => updateFloorUse(floor.id, e.target.value as any)}
+                                  className="text-[9px] bg-slate-50 border-slate-200 text-slate-600 rounded-lg py-1 px-2 font-bold cursor-pointer hover:bg-slate-100 transition-colors"
+                                >
+                                  <option value="residential">Residential</option>
+                                  <option value="commercial">Commercial</option>
+                                  <option value="community_facility">Community</option>
+                                </select>
+                                <button 
+                                  onClick={() => removeFloor(floor.id)}
+                                  className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                </button>
+                              </div>
                             </div>
-
-                            <button 
-                              onClick={() => removeFloor(floor.id)}
-                              className="text-slate-300 hover:text-red-500 transition-colors p-1"
-                            >
-                              <Plus size={14} className="rotate-45" />
-                            </button>
+                            {activeScratchFloor === floor.id && (
+                              <ScratchPad floorId={floor.id} onClose={() => setActiveScratchFloor(null)} />
+                            )}
                           </div>
                         ))}
                       </div>
@@ -692,8 +727,9 @@ export default function Sidebar() {
                               {(totalBuildArea).toLocaleString()} <span className="text-[10px] font-bold text-slate-400 ml-0.5">SF</span>
                             </p>
                             <div className="flex gap-2 text-[8px] font-bold uppercase">
-                              <span className="text-blue-500">{totalResidArea.toLocaleString()} R</span>
-                              <span className="text-amber-500">{totalCommArea.toLocaleString()} C</span>
+                              {totalResidArea > 0 && <span className="text-yellow-600">{totalResidArea.toLocaleString()} R</span>}
+                              {totalCommArea > 0 && <span className="text-red-600">{totalCommArea.toLocaleString()} C</span>}
+                              {totalCFArea > 0 && <span className="text-blue-600">{totalCFArea.toLocaleString()} CF</span>}
                             </div>
                           </div>
                         </div>
@@ -828,6 +864,13 @@ export default function Sidebar() {
               </p>
             </section>
           </div>
+        </div>
+      )}
+
+      {/* TAB: MATRIX */}
+      {activeTab === 'matrix' && (
+        <div className="h-full w-full animate-in fade-in duration-300">
+          <UseGroupMatrix />
         </div>
       )}
     </div>

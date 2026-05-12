@@ -41,8 +41,10 @@ export default function MassingPreview({ floors, lotArea }: MassingPreviewProps)
               key={floor.id}
               className={`transition-all duration-500 ease-out border-t shadow-sm ${
                 floor.use === 'commercial' 
-                  ? 'bg-amber-400 border-amber-300' 
-                  : 'bg-blue-500 border-blue-400'
+                  ? 'bg-red-500 border-red-400' 
+                  : floor.use === 'community_facility'
+                  ? 'bg-blue-500 border-blue-400'
+                  : 'bg-yellow-400 border-yellow-300'
               }`}
               style={{ 
                 width: `${width}px`, 
@@ -77,7 +79,7 @@ export default function MassingPreview({ floors, lotArea }: MassingPreviewProps)
         </div>
         <div className="flex gap-3">
           <span className="text-[10px] text-slate-400 font-bold">
-            {floors.filter(f => f.use === 'residential').length} Res / {floors.filter(f => f.use === 'commercial').length} Comm
+            {floors.filter(f => f.use === 'residential').length} Res / {floors.filter(f => f.use === 'commercial').length} Comm / {floors.filter(f => f.use === 'community_facility').length} CF
           </span>
           <span className="text-[10px] text-slate-300 font-bold uppercase tracking-tighter">
             {floors.length > 7 ? 'Setback Applied' : ''}
@@ -88,12 +90,16 @@ export default function MassingPreview({ floors, lotArea }: MassingPreviewProps)
       {/* Legend */}
       <div className="absolute bottom-4 right-4 flex flex-col gap-1.5 bg-white/50 backdrop-blur-sm p-2 rounded-lg border border-slate-100">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-blue-500 rounded-sm"></div>
+          <div className="w-2 h-2 bg-yellow-400 rounded-sm"></div>
           <span className="text-[8px] font-bold text-slate-500 uppercase">Residential</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-amber-400 rounded-sm"></div>
+          <div className="w-2 h-2 bg-red-500 rounded-sm"></div>
           <span className="text-[8px] font-bold text-slate-500 uppercase">Commercial</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-blue-500 rounded-sm"></div>
+          <span className="text-[8px] font-bold text-slate-500 uppercase">Comm. Facility</span>
         </div>
       </div>
     </div>
