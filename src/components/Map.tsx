@@ -11,6 +11,7 @@ export default function Map() {
     lotData,
     lotGeometry, setLotGeometry,
     floorsList, setFloorsList,
+    floorGeometries,
     mapMode, setMapMode 
   } = useZoning();
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -203,7 +204,16 @@ export default function Map() {
       console.error("MapLibre error:", e.error);
     });
 
+    const resizeObserver = new ResizeObserver(() => {
+      map.current?.resize();
+    });
+    
+    if (mapContainer.current) {
+      resizeObserver.observe(mapContainer.current);
+    }
+
     return () => {
+      resizeObserver.disconnect();
       map.current?.remove();
     };
   }, []);
@@ -221,7 +231,7 @@ export default function Map() {
       
       return {
         type: "Feature",
-        geometry: lotGeometry,
+        geometry: floorGeometries[floor.id] || lotGeometry,
         properties: {
           base_height: baseHeight,
           height: height,
@@ -257,7 +267,7 @@ export default function Map() {
         });
       }
     }
-  }, [floorsList, lotGeometry, lotData]);
+  }, [floorsList, lotGeometry, lotData, floorGeometries]);
 
   // Handle 2D/3D Mode
   useEffect(() => {

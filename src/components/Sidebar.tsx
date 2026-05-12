@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useZoning } from "@/context/ZoningContext";
-import { Info, Map as MapIcon, BookOpen, ChevronRight, Loader2, Plus, ArrowRight, Search } from "lucide-react";
+import { Info, Map as MapIcon, BookOpen, ChevronRight, Loader2, Plus, ArrowRight, Search, Copy } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import MassingPreview from "./MassingPreview";
 import ScratchPad from "./ScratchPad";
@@ -15,6 +15,7 @@ export default function Sidebar() {
     lotData, setLotData, 
     activeTab, setActiveTab,
     floorsList, setFloorsList,
+    floorGeometries, setFloorGeometries,
     mapMode, setMapMode 
   } = useZoning();
   
@@ -35,6 +36,28 @@ export default function Sidebar() {
 
   const removeFloor = (id: number) => {
     setFloorsList(floorsList.filter(f => f.id !== id));
+  };
+
+  const duplicateFloor = (id: number) => {
+    const floorToCopy = floorsList.find(f => f.id === id);
+    if (!floorToCopy) return;
+    
+    const newId = Date.now();
+    const newFloor = { ...floorToCopy, id: newId };
+    
+    // Insert immediately after the current floor
+    const index = floorsList.findIndex(f => f.id === id);
+    const newList = [...floorsList];
+    newList.splice(index + 1, 0, newFloor);
+    setFloorsList(newList);
+    
+    // Copy geometry if exists
+    if (floorGeometries[id]) {
+      setFloorGeometries({
+        ...floorGeometries,
+        [newId]: floorGeometries[id]
+      });
+    }
   };
 
   const updateFloorArea = (id: number, area: number) => {
@@ -629,8 +652,16 @@ export default function Sidebar() {
                                   <option value="community_facility">Community</option>
                                 </select>
                                 <button 
+                                  onClick={() => duplicateFloor(floor.id)}
+                                  className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                  title="Duplicate Floor"
+                                >
+                                  <Copy size={12} />
+                                </button>
+                                <button 
                                   onClick={() => removeFloor(floor.id)}
                                   className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Remove Floor"
                                 >
                                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
                                 </button>
