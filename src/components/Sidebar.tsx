@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useZoning } from "@/context/ZoningContext";
-import { Info, Map as MapIcon, BookOpen, ChevronRight, Loader2, Plus, ArrowRight, Search, Copy } from "lucide-react";
+import { Info, Map as MapIcon, BookOpen, ChevronRight, Loader2, Plus, ArrowRight, Search, Copy, X } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import MassingPreview from "./MassingPreview";
 import ScratchPad from "./ScratchPad";
@@ -611,7 +611,7 @@ export default function Sidebar() {
                           <div className="flex items-center justify-between">
                             <p className="text-[10px] font-bold text-slate-400 uppercase">Property Profile (BIS)</p>
                             <a 
-                              href={getBisLink(selectedBBL)} 
+                              href={getBisLink(selectedBBLs[0])} 
                               target="_blank" 
                               className="text-[9px] bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100 font-bold hover:bg-blue-100 transition-colors"
                             >
