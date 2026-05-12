@@ -49,7 +49,7 @@ async function callGeminiRaw(prompt: string, modelName: string, apiKey: string) 
 
 export async function POST(request: Request) {
   try {
-    const { message, zoningDistricts } = await request.json();
+    const { message, zoningDistricts, context: personaContext } = await request.json();
     const districts = zoningDistricts || [];
 
     const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim();
@@ -67,8 +67,10 @@ export async function POST(request: Request) {
     }
 
     const prompt = `
-      You are the "NYC Zoning Consultant Agent". Your goal is to help an average property owner or potential developer understand their lot's potential or generic NYC zoning rules. 
-      Unlike ZoLa (which just shows data), you provide actionable insights and explain the "Why" and "How".
+      You are the "NYC Zoning Consultant Agent". Your goal is to help users understand their lot's potential or generic NYC zoning rules by providing actionable insights and explaining the "Why" and "How".
+      
+      PERSONA CONTEXT:
+      ${personaContext || "Focus on professional and balanced advice."}
       
       ${districts.length > 0 ? `Target Zoning Districts: ${districts.join(", ")}` : "Topic: General NYC Zoning Regulations"}
       
@@ -78,7 +80,10 @@ export async function POST(request: Request) {
       USER QUESTION: ${message || "Please provide a 'Discovery Summary' for the selected districts or general NYC zoning."}
       
       CONSULTANT GUIDELINES:
-      1. SIMPLIFY: Explain terms like FAR, Setbacks, and Use Groups in simple English.
+      1. SIMPLIFY & TRANSLATE: 
+         - Always decode "Use Groups" (1-18) into real-world examples (e.g., Use Group 6 = Local Retail like cafes).
+         - Use "Community Landmarks" for scale: Compare heights to "brownstones" (approx 12ft/floor) or "stories".
+         - Explain technical terms (FAR, Setbacks, Bulk) in simple English.
       2. DEVELOPMENT PATH: Include a brief "Next Steps" section.
       3. CITATIONS: Cite specific Section numbers (e.g., Section 23-145) from the context provided.
       4. FORMATTING: Use bold headers and clean bullet points.

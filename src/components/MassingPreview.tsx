@@ -1,12 +1,7 @@
 "use client";
 
 import React from "react";
-
-interface Floor {
-  id: number;
-  area: number;
-  use: 'residential' | 'commercial';
-}
+import { Floor } from "@/context/ZoningContext";
 
 interface MassingPreviewProps {
   floors: Floor[];

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState } from "react";
 
-interface Floor {
+export interface Floor {
   id: number;
   area: number;
   use: 'residential' | 'commercial' | 'community_facility';

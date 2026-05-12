@@ -8,6 +8,7 @@ import MassingPreview from "./MassingPreview";
 import ScratchPad from "./ScratchPad";
 import { GlossaryTooltip } from "./GlossaryTooltip";
 import { UseGroupMatrix } from "./UseGroupMatrix";
+import { translateArea, translateHeight } from "@/utils/communityTranslations";
 
 export default function Sidebar() {
   const { 
@@ -25,6 +26,7 @@ export default function Sidebar() {
   const [activeScratchFloor, setActiveScratchFloor] = useState<number | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [question, setQuestion] = useState("");
+  const [persona, setPersona] = useState<"developer" | "citizen" | "architect">("developer");
   const [applyFresh, setApplyFresh] = useState(false);
   const [applyTransit, setApplyTransit] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -115,18 +117,29 @@ export default function Sidebar() {
   }, [selectedBBL, setLotData]);
 
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([
-    "What are the density bonuses for FRESH and MIH?",
+    "What is the maximum allowed FAR?",
+    "Does this qualify for FRESH or MIH?",
+    "Explain the rules in plain English.",
     "What are the height and setback rules?",
-    "Can I build residential here?",
-    "What is the maximum allowed FAR?"
+    "Can I build residential here?"
   ]);
 
   const fetchAiSummary = async (districts: string[], q?: string) => {
     setChatLoading(true);
     try {
+      const personaContext = {
+        developer: "Focus on buildable area, FAR bonuses, and investment feasibility.",
+        citizen: "Focus on community impact, affordable housing, and height in plain English.",
+        architect: "Focus on technical zoning resolution citations, massing, and setbacks."
+      };
+
       const response = await fetch("/api/chat", {
         method: "POST",
-        body: JSON.stringify({ message: q, zoningDistricts: districts }),
+        body: JSON.stringify({ 
+          message: q, 
+          zoningDistricts: districts,
+          context: personaContext[persona]
+        }),
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error);
@@ -292,6 +305,21 @@ export default function Sidebar() {
           <div className="h-full flex flex-col animate-in fade-in duration-300">
             {/* CHAT INPUT AT TOP */}
             <div className="p-4 bg-slate-50 border-b border-slate-100 sticky top-0 z-20 space-y-3 shadow-sm">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="flex gap-1 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                  {(['developer', 'citizen', 'architect'] as const).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setPersona(p)}
+                      className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter transition-all ${persona === p ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest italic opacity-60">Consultant Mode</span>
+              </div>
+              
               <div className="relative">
                 <input 
                   type="text" 
@@ -762,27 +790,52 @@ export default function Sidebar() {
                               {totalCommArea > 0 && <span className="text-red-600">{totalCommArea.toLocaleString()} C</span>}
                               {totalCFArea > 0 && <span className="text-blue-600">{totalCFArea.toLocaleString()} CF</span>}
                             </div>
+                            <div className="pt-1">
+                              <p className="text-[9px] font-bold text-blue-600/80 italic leading-snug">
+                                {translateArea(totalBuildArea)}
+                              </p>
+                            </div>
                           </div>
                         </div>
                         <div className="space-y-1 text-right">
-                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Scenario / Max FAR</p>
-                          <div className="flex flex-col items-end gap-0.5">
-                            <div className="flex items-center justify-end gap-2">
-                              <p className={`text-lg font-black tabular-nums ${parseFloat(calculatedFAR) > maxAllowedFAR ? 'text-red-600' : 'text-blue-600'}`}>
-                                {calculatedFAR}
-                              </p>
-                              <span className="text-slate-300 font-bold">/</span>
-                              <p className="text-sm font-bold text-slate-400 tabular-nums">
-                                {maxAllowedFAR.toFixed(2)}
+                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Est. Total Height</p>
+                          <div className="space-y-0.5">
+                            <p className="text-lg font-black text-slate-800 tabular-nums leading-tight">
+                              {Math.round(floorsList.length * 11.5).toLocaleString()} <span className="text-[10px] font-bold text-slate-400 ml-0.5">FT</span>
+                            </p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
+                              {floorsList.length} FLOORS
+                            </p>
+                            <div className="pt-1">
+                              <p className="text-[9px] font-bold text-blue-600/80 italic leading-snug">
+                                {translateHeight(floorsList.length * 11.5)}
                               </p>
                             </div>
-                            {totalCommArea > 0 && lotData?.metadata?.maxCommFAR && (
-                              <p className="text-[8px] font-bold text-amber-500">
-                                Comm limit: {(totalCommArea / lotData.metadata.lotArea).toFixed(2)} / {lotData.metadata.maxCommFAR}
-                              </p>
-                            )}
                           </div>
                         </div>
+                      </div>
+
+                      <div className="pt-5 border-t border-slate-100 flex justify-between items-center relative z-10">
+                        <div className="space-y-1">
+                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Scenario / Max FAR</p>
+                          <div className="flex items-center gap-2">
+                            <p className={`text-lg font-black tabular-nums ${parseFloat(calculatedFAR) > maxAllowedFAR ? 'text-red-600' : 'text-blue-600'}`}>
+                              {calculatedFAR}
+                            </p>
+                            <span className="text-slate-300 font-bold">/</span>
+                            <p className="text-sm font-bold text-slate-400 tabular-nums">
+                              {maxAllowedFAR.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+                        {totalCommArea > 0 && lotData?.metadata?.maxCommFAR && (
+                          <div className="text-right">
+                            <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Comm Limit</p>
+                            <p className="text-[10px] font-bold text-amber-500">
+                              {(totalCommArea / lotData.metadata.lotArea).toFixed(2)} / {lotData.metadata.maxCommFAR}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
