@@ -30,6 +30,12 @@ export default function Sidebar() {
   const [applyFresh, setApplyFresh] = useState(false);
   const [applyTransit, setApplyTransit] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [showFinancials, setShowFinancials] = useState(false);
+  
+  // Financial Inputs
+  const [hardCostPerSF, setHardCostPerSF] = useState(450);
+  const [marketValuePerSF, setMarketValuePerSF] = useState(1100);
+  const [softCostPercent, setSoftCostPercent] = useState(15);
 
   const addFloor = () => {
     const lastFloor = floorsList.length > 0 ? floorsList[floorsList.length - 1] : { area: 1000, use: 'residential' as const };
@@ -804,6 +810,79 @@ export default function Sidebar() {
                             {applyTransit ? <div className="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.5)]" /> : <div className="w-2 h-2 bg-slate-100 rounded-full border border-slate-200" />}
                           </button>
                         </div>
+                      </div>
+
+                      {/* FINANCIAL FEASIBILITY SECTION */}
+                      <div className="pt-4 border-t border-slate-100 relative z-10">
+                        <button 
+                          onClick={() => setShowFinancials(!showFinancials)}
+                          className="w-full flex items-center justify-between px-1 mb-2 hover:opacity-70 transition-opacity"
+                        >
+                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Financial Feasibility (Pro-Forma)</p>
+                          <ChevronRight size={14} className={`text-slate-400 transition-transform ${showFinancials ? 'rotate-90' : ''}`} />
+                        </button>
+
+                        {showFinancials && (
+                          <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-[8px] font-bold text-slate-400 uppercase">Hard Cost / SF</label>
+                                <div className="relative">
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">$</span>
+                                  <input 
+                                    type="number" 
+                                    value={hardCostPerSF}
+                                    onChange={(e) => setHardCostPerSF(parseInt(e.target.value) || 0)}
+                                    className="w-full bg-white border border-slate-200 rounded-lg pl-5 pr-2 py-1.5 text-[10px] font-bold focus:ring-1 focus:ring-blue-500/20 no-print"
+                                  />
+                                </div>
+                              </div>
+                              <div className="space-y-1 text-right">
+                                <label className="text-[8px] font-bold text-slate-400 uppercase">Market Value / SF</label>
+                                <div className="relative">
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">$</span>
+                                  <input 
+                                    type="number" 
+                                    value={marketValuePerSF}
+                                    onChange={(e) => setMarketValuePerSF(parseInt(e.target.value) || 0)}
+                                    className="w-full bg-white border border-slate-200 rounded-lg pl-5 pr-2 py-1.5 text-[10px] font-bold text-right focus:ring-1 focus:ring-blue-500/20 no-print"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="bg-slate-900 rounded-2xl p-4 text-white shadow-xl shadow-slate-200/50 space-y-4">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-0.5">
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Total Project Cost</p>
+                                  <p className="text-sm font-black tabular-nums">
+                                    ${((totalBuildArea * hardCostPerSF) * (1 + softCostPercent/100)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                  </p>
+                                </div>
+                                <div className="space-y-0.5 text-right">
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Est. Sellout Value</p>
+                                  <p className="text-sm font-black text-emerald-400 tabular-nums">
+                                    ${(totalBuildArea * marketValuePerSF).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="pt-3 border-t border-white/10 flex justify-between items-end">
+                                <div className="space-y-0.5">
+                                  <p className="text-[8px] font-bold text-slate-500 uppercase">Potential Profit</p>
+                                  <p className={`text-xl font-black tabular-nums leading-none ${((totalBuildArea * marketValuePerSF) - ((totalBuildArea * hardCostPerSF) * (1 + softCostPercent/100))) > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    ${((totalBuildArea * marketValuePerSF) - ((totalBuildArea * hardCostPerSF) * (1 + softCostPercent/100))).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <div className={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-tighter ${((totalBuildArea * marketValuePerSF) - ((totalBuildArea * hardCostPerSF) * (1 + softCostPercent/100))) > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                                    {(((totalBuildArea * marketValuePerSF) / ((totalBuildArea * hardCostPerSF) * (1 + softCostPercent/100)) - 1) * 100).toFixed(1)}% ROI
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-2 gap-6 pt-5 border-t border-slate-100 relative z-10">
