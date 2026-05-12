@@ -221,12 +221,14 @@ export default function Sidebar() {
       try {
         // Use first BBL for neighborhood context
         const primaryBBL = selectedBBLs[0];
+        const subQuery = `
+          WITH lot AS (SELECT the_geom FROM mappluto WHERE bbl = '${primaryBBL}' LIMIT 1)
           SELECT name, line, ST_Distance(the_geom::geography, (SELECT the_geom FROM lot)::geography) as dist 
           FROM subway_stations 
           ORDER BY dist LIMIT 3
         `;
         const parkQuery = `
-          WITH lot AS (SELECT the_geom FROM mappluto WHERE bbl = '${selectedBBL}' LIMIT 1)
+          WITH lot AS (SELECT the_geom FROM mappluto WHERE bbl = '${primaryBBL}' LIMIT 1)
           SELECT signname as name, ST_Distance(the_geom::geography, (SELECT the_geom FROM lot)::geography) as dist 
           FROM hydra_parks_properties 
           ORDER BY dist LIMIT 1
@@ -244,7 +246,7 @@ export default function Sidebar() {
       }
     };
     fetchNeighborhood();
-  }, [selectedBBL]);
+  }, [selectedBBLs]);
 
   const getZoningLink = (districts: string[]) => {
     if (!districts || districts.length === 0) return "https://zr.planning.nyc.gov/";
