@@ -31,16 +31,16 @@ export default function MassingPreview({ floors, lotArea }: MassingPreviewProps)
           const setbackFactor = i > 6 ? 1 - (Math.min(0.4, (i - 6) * 0.05)) : 1;
           const width = getWidth(floor.area) * setbackFactor;
           
+          const useColors: Record<string, string> = {
+            commercial: 'bg-red-500 border-red-400',
+            community_facility: 'bg-blue-500 border-blue-400',
+            residential: 'bg-yellow-400 border-yellow-300'
+          };
+          
           return (
             <div 
               key={floor.id}
-              className={`transition-all duration-500 ease-out border-t shadow-sm ${
-                floor.use === 'commercial' 
-                  ? 'bg-red-500 border-red-400' 
-                  : floor.use === 'community_facility'
-                  ? 'bg-blue-500 border-blue-400'
-                  : 'bg-yellow-400 border-yellow-300'
-              }`}
+              className={`transition-all duration-500 ease-out border-t shadow-sm ${useColors[floor.use] || useColors.residential}`}
               style={{ 
                 width: `${width}px`, 
                 height: i < 1 ? '18px' : '14px', // Ground floor slightly taller
@@ -74,7 +74,7 @@ export default function MassingPreview({ floors, lotArea }: MassingPreviewProps)
         </div>
         <div className="flex gap-3">
           <span className="text-[10px] text-slate-400 font-bold">
-            {floors.filter(f => f.use === 'residential').length} Res / {floors.filter(f => f.use === 'commercial').length} Comm / {floors.filter(f => f.use === 'community_facility').length} CF
+            {floors.filter(f => (f.use as string) === 'residential').length} Res / {floors.filter(f => (f.use as string) === 'commercial').length} Comm / {floors.filter(f => (f.use as string) === 'community_facility').length} CF
           </span>
           <span className="text-[10px] text-slate-300 font-bold uppercase tracking-tighter">
             {floors.length > 7 ? 'Setback Applied' : ''}

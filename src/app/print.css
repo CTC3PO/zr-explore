@@ -1,0 +1,85 @@
+@media print {
+  /* Hide non-printable elements */
+  .no-print,
+  header,
+  .search-section,
+  .nav-tabs,
+  button:not(.print-visible),
+  .resize-handle,
+  .map-controls,
+  input,
+  select {
+    display: none !important;
+  }
+
+  /* Reset layout for print */
+  body, html {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  main {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Sidebar becomes the report body */
+  div[style*="--sidebar-width"] {
+    width: 100% !important;
+    height: auto !important;
+    position: static !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  .flex-1.overflow-y-auto {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Ensure map is visible if possible, or hide it if it breaks layout */
+  .map-area {
+    height: 400px !important;
+    width: 100% !important;
+    page-break-after: always;
+  }
+
+  /* Professional report styling */
+  h2 {
+    font-size: 24pt !important;
+    color: #1e293b !important;
+    margin-top: 20pt !important;
+  }
+
+  .grid {
+    display: grid !important;
+    gap: 10pt !important;
+  }
+
+  .bg-slate-50, .bg-blue-50, .bg-emerald-50 {
+    background-color: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Add report header */
+  .report-header {
+    display: block !important;
+    border-bottom: 2px solid #2563eb;
+    padding-bottom: 10pt;
+    margin-bottom: 20pt;
+  }
+
+  .report-header h1 {
+    font-size: 18pt;
+    font-weight: 900;
+    color: #2563eb;
+  }
+}
+
+/* Hidden by default in UI */
+.report-header {
+  display: none;
+}

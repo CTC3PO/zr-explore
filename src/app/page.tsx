@@ -11,7 +11,7 @@ export default function Home() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(384);
   const isResizing = useRef(false);
-  const { selectedBBL } = useZoning();
+  const { selectedBBLs } = useZoning();
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -49,7 +49,7 @@ export default function Home() {
           md:relative md:translate-x-0 md:h-full md:shadow-none md:border-r md:border-slate-200
           w-full md:w-[var(--sidebar-width)]
           ${isExpanded ? 'h-[90vh]' : 'h-[45vh]'} 
-          ${!selectedBBL ? 'translate-y-full md:translate-y-0' : 'translate-y-0'}
+          ${selectedBBLs.length === 0 ? 'translate-y-full md:translate-y-0' : 'translate-y-0'}
           md:flex md:flex-col
         `}
       >
@@ -79,12 +79,12 @@ export default function Home() {
       {/* MAP AREA */}
       <div className={`
         flex-1 relative transition-all duration-500
-        ${selectedBBL ? 'h-[55vh] md:h-full' : 'h-full'}
+        ${selectedBBLs.length > 0 ? 'h-[55vh] md:h-full' : 'h-full'}
       `}>
         <Map />
         
         {/* Welcome message when no lot selected */}
-        {!selectedBBL && (
+        {selectedBBLs.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none p-6">
             <div className="bg-white/90 backdrop-blur-md p-6 rounded-3xl border border-white shadow-2xl text-center max-w-sm">
               <h2 className="text-xl font-bold text-slate-800 mb-2">Welcome to ZR-Explore</h2>

@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import * as turf from "@turf/turf";
 import { useZoning } from "@/context/ZoningContext";
 
 export default function Map() {
   const { 
-    selectedBBL, setSelectedBBL, 
+    selectedBBLs, setSelectedBBLs, 
     lotData,
     lotGeometry, setLotGeometry,
     floorsList, setFloorsList,
@@ -190,7 +191,18 @@ export default function Map() {
         const response = await fetch(`https://planninglabs.carto.com/api/v2/sql?q=${encodeURIComponent(query)}`);
         const data = await response.json();
         if (data.rows && data.rows.length > 0) {
-          setSelectedBBL(data.rows[0].bbl);
+          const bbl = data.rows[0].bbl;
+          const isMulti = e.originalEvent.shiftKey || e.originalEvent.metaKey;
+          
+          if (isMulti) {
+            if (selectedBBLs.includes(bbl)) {
+              setSelectedBBLs(selectedBBLs.filter(id => id !== bbl));
+            } else {
+              setSelectedBBLs([...selectedBBLs, bbl]);
+            }
+          } else {
+            setSelectedBBLs([bbl]);
+          }
         }
       } catch (error) {
         console.error("Error finding BBL:", error);
@@ -225,9 +237,12 @@ export default function Map() {
     const features = floorsList.map((floor, index) => {
       const baseHeight = index * 3.5; // 3.5m per floor
       const height = (index + 1) * 3.5;
-      let color = '#facc15'; // residential (yellow-400)
-      if (floor.use === 'commercial') color = '#ef4444'; // red-500
-      if (floor.use === 'community_facility') color = '#3b82f6'; // blue-500
+      const colorMap: Record<string, string> = {
+        residential: '#facc15',
+        commercial: '#ef4444',
+        community_facility: '#3b82f6'
+      };
+      const color = colorMap[floor.use] || colorMap.residential;
       
       return {
         type: "Feature",
@@ -292,27 +307,50 @@ export default function Map() {
   }, [mapMode]);
 
   useEffect(() => {
-    if (!map.current || !selectedBBL) return;
+    if (!map.current || selectedBBLs.length === 0) {
+      if (map.current) {
+        const source = map.current.getSource("selected-lot") as maplibregl.GeoJSONSource;
+        if (source) source.setData({ type: "FeatureCollection", features: [] });
+      }
+      return;
+    }
 
     const updateHighlight = async () => {
       try {
-        const query = `SELECT ST_AsGeoJSON(the_geom) as geom FROM mappluto WHERE bbl = '${selectedBBL}' LIMIT 1`;
+        const query = `SELECT ST_AsGeoJSON(the_geom) as geom FROM mappluto WHERE bbl IN (${selectedBBLs.map(id => `'${id}'`).join(',')})`;
         const response = await fetch(`https://planninglabs.carto.com/api/v2/sql?q=${encodeURIComponent(query)}`);
         const data = await response.json();
 
         if (data.rows && data.rows.length > 0) {
-          const geojson = JSON.parse(data.rows[0].geom);
-          setLotGeometry(geojson); // Store geometry for 3D extrusion
+          const geoms = data.rows.map((r: any) => JSON.parse(r.geom));
+          
+          // Union all lot geometries for the assemblage
+          let combined: any = geoms[0];
+          if (geoms.length > 1) {
+            try {
+              let unioned = turf.feature(geoms[0]);
+              for (let i = 1; i < geoms.length; i++) {
+                unioned = turf.union(turf.featureCollection([unioned, turf.feature(geoms[i])])) as any;
+              }
+              combined = unioned.geometry;
+            } catch (err) {
+              console.error("Union failed:", err);
+            }
+          }
+          
+          setLotGeometry(combined);
 
           const source = map.current?.getSource("selected-lot") as maplibregl.GeoJSONSource;
           if (source) {
             source.setData({
               type: "FeatureCollection",
-              features: [{ type: "Feature", geometry: geojson, properties: {} }]
+              features: geoms.map((g: any) => ({ type: "Feature", geometry: g, properties: {} }))
             });
             
-            const coordinates = geojson.type === "Polygon" ? geojson.coordinates[0][0] : geojson.coordinates[0][0][0];
-            map.current?.flyTo({ center: coordinates, zoom: 17 });
+            // Fit map to bounds of all lots
+            const collection = turf.featureCollection(geoms.map((g: any) => turf.feature(g)));
+            const bbox = turf.bbox(collection);
+            map.current?.fitBounds([bbox[0], bbox[1], bbox[2], bbox[3]], { padding: 50, duration: 1000 });
           }
         }
       } catch (error) {
@@ -320,14 +358,14 @@ export default function Map() {
       }
     };
     updateHighlight();
-  }, [selectedBBL]);
+  }, [selectedBBLs]);
 
   return (
     <div className="h-full w-full relative bg-slate-100 overflow-hidden">
       <div ref={mapContainer} className="absolute inset-0" style={{ height: '100%', width: '100%' }} />
       
       {/* MAP CONTROLS */}
-      <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-10">
+      <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-10 no-print">
         <button 
           onClick={() => setMapMode(mapMode === '2D' ? '3D' : '2D')}
           className="bg-white/95 backdrop-blur px-4 py-2 rounded-xl shadow-xl text-[10px] font-black text-blue-600 border border-slate-200 hover:bg-white transition-all active:scale-95 uppercase tracking-widest flex items-center gap-2"
@@ -337,7 +375,7 @@ export default function Map() {
         </button>
       </div>
 
-      <div className="absolute top-4 right-4 bg-white/95 backdrop-blur px-3 py-1.5 rounded-full shadow-lg text-[10px] font-bold text-slate-600 z-10 border border-slate-200 pointer-events-none">
+      <div className="absolute top-4 right-4 bg-white/95 backdrop-blur px-3 py-1.5 rounded-full shadow-lg text-[10px] font-bold text-slate-600 z-10 border border-slate-200 pointer-events-none no-print">
         Click map to consult a lot
       </div>
     </div>

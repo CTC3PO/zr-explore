@@ -9,8 +9,8 @@ export interface Floor {
 }
 
 interface ZoningContextType {
-  selectedBBL: string | null;
-  setSelectedBBL: (bbl: string | null) => void;
+  selectedBBLs: string[];
+  setSelectedBBLs: (bbls: string[]) => void;
   lotData: any | null;
   setLotData: (data: any | null) => void;
   lotGeometry: any | null;
@@ -28,7 +28,7 @@ interface ZoningContextType {
 const ZoningContext = createContext<ZoningContextType | undefined>(undefined);
 
 export function ZoningProvider({ children }: { children: React.ReactNode }) {
-  const [selectedBBL, setSelectedBBL] = useState<string | null>(null);
+  const [selectedBBLs, setSelectedBBLs] = useState<string[]>([]);
   const [lotData, setLotData] = useState<any | null>(null);
   const [lotGeometry, setLotGeometry] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState<"explorer" | "builder" | "chat" | "matrix">("explorer");
@@ -41,8 +41,8 @@ export function ZoningProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ZoningContext.Provider value={{ 
-      selectedBBL, 
-      setSelectedBBL, 
+      selectedBBLs, 
+      setSelectedBBLs, 
       lotData, 
       setLotData,
       lotGeometry,

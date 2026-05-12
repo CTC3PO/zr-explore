@@ -4,7 +4,7 @@ import { useZoning } from "@/context/ZoningContext";
 import { Map as MapIcon, Plus, BookOpen, Search, Grid } from "lucide-react";
 
 export default function Header() {
-  const { activeTab, setActiveTab, selectedBBL } = useZoning();
+  const { activeTab, setActiveTab, selectedBBLs } = useZoning();
 
   const tabs = [
     { id: 'explorer', label: 'Explorer', icon: MapIcon },
@@ -14,7 +14,7 @@ export default function Header() {
   ];
 
   return (
-    <header className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex items-center bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl shadow-xl px-2 py-1.5 gap-1 min-w-[320px] md:min-w-[400px]">
+    <header className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex items-center bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl shadow-xl px-2 py-1.5 gap-1 min-w-[320px] md:min-w-[400px] no-print">
       <div className="flex-1 flex items-center gap-2 px-3 mr-4 border-r border-slate-100">
         <div className="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
           <Search size={16} />

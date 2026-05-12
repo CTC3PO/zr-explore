@@ -12,7 +12,7 @@ import { translateArea, translateHeight } from "@/utils/communityTranslations";
 
 export default function Sidebar() {
   const { 
-    selectedBBL, setSelectedBBL, 
+    selectedBBLs, setSelectedBBLs, 
     lotData, setLotData, 
     activeTab, setActiveTab,
     floorsList, setFloorsList,
@@ -82,24 +82,46 @@ export default function Sidebar() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (!selectedBBL) {
+    if (selectedBBLs.length === 0) {
       setLotData(null);
       return;
     }
-    setActiveTab('explorer');
+    
+    // Only reset tab if it's the first selection
+    if (selectedBBLs.length === 1) setActiveTab('explorer');
 
     const fetchData = async () => {
       setLoading(true);
       try {
-        const response = await fetch(`/api/lookup?bbl=${selectedBBL}`);
-        const data = await response.json();
-        if (data.error) throw new Error(data.error);
-        setLotData(data);
+        const results = await Promise.all(
+          selectedBBLs.map(bbl => fetch(`/api/lookup?bbl=${bbl}`).then(res => res.json()))
+        );
+
+        const errors = results.filter(r => r.error);
+        if (errors.length > 0 && selectedBBLs.length === 1) throw new Error(errors[0].error);
+
+        // Aggregate Data
+        const aggregated = {
+          address: selectedBBLs.length > 1 ? `Assemblage: ${selectedBBLs.length} Lots` : results[0].address,
+          bbl: selectedBBLs.length > 1 ? "MULTIPLE" : results[0].bbl,
+          zoningDistricts: Array.from(new Set(results.flatMap(r => r.zoningDistricts))),
+          specialDistricts: Array.from(new Set(results.flatMap(r => r.specialDistricts || []))),
+          metadata: {
+            lotArea: results.reduce((sum, r) => sum + (r.metadata?.lotArea || 0), 0),
+            builtFAR: (results.reduce((sum, r) => sum + (parseFloat(r.metadata?.builtFAR) || 0), 0) / results.length).toFixed(2),
+            maxResidFAR: results[0].metadata?.maxResidFAR, // Assume first lot's rules for MVP
+            maxCommFAR: results[0].metadata?.maxCommFAR,
+            floors: results.reduce((sum, r) => sum + (parseInt(r.metadata?.floors) || 0), 0)
+          },
+          taxData: results[0].taxData,
+          subLots: results
+        };
+
+        setLotData(aggregated);
+        fetchAiSummary(aggregated.zoningDistricts);
         
-        fetchAiSummary(data.zoningDistricts);
-        
-        if (data.metadata?.lotArea) {
-          const suggestedArea = Math.round(data.metadata.lotArea * 0.6);
+        if (aggregated.metadata?.lotArea && selectedBBLs.length === 1) {
+          const suggestedArea = Math.round(aggregated.metadata.lotArea * 0.6);
           setFloorsList([
             { id: 1, area: suggestedArea, use: 'residential' },
             { id: 2, area: suggestedArea, use: 'residential' }
@@ -114,7 +136,7 @@ export default function Sidebar() {
     };
 
     fetchData();
-  }, [selectedBBL, setLotData]);
+  }, [selectedBBLs, setLotData]);
 
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([
     "What is the maximum allowed FAR?",
@@ -193,13 +215,12 @@ export default function Sidebar() {
   const [neighborhoodData, setNeighborhoodData] = useState<{ subways: any[], parks: any[] }>({ subways: [], parks: [] });
 
   useEffect(() => {
-    if (!selectedBBL) return;
+    if (selectedBBLs.length === 0) return;
 
     const fetchNeighborhood = async () => {
       try {
-        // Fetch nearest subways and parks
-        const subQuery = `
-          WITH lot AS (SELECT the_geom FROM mappluto WHERE bbl = '${selectedBBL}' LIMIT 1)
+        // Use first BBL for neighborhood context
+        const primaryBBL = selectedBBLs[0];
           SELECT name, line, ST_Distance(the_geom::geography, (SELECT the_geom FROM lot)::geography) as dist 
           FROM subway_stations 
           ORDER BY dist LIMIT 3
@@ -245,12 +266,12 @@ export default function Sidebar() {
   return (
     <div className="h-full flex flex-col bg-white overflow-hidden">
       {/* SEARCH SECTION */}
-      <div className="p-4 border-b border-slate-100 bg-white shadow-sm relative z-20">
+      <div className="p-4 border-b border-slate-100 bg-white shadow-sm relative z-20 no-print">
         <div className="relative flex items-center gap-2">
           <form onSubmit={(e) => {
             e.preventDefault();
             if (searchInput.length === 10 && !isNaN(Number(searchInput))) {
-              setSelectedBBL(searchInput);
+              setSelectedBBLs([searchInput]);
               setSuggestions([]);
             }
           }} className="w-full">
@@ -282,7 +303,7 @@ export default function Sidebar() {
                   onClick={() => {
                     const bbl = s.properties.addendum?.pad?.bbl || s.properties.pad_bbl || s.properties.bbl || s.properties.id;
                     if (bbl) {
-                      setSelectedBBL(bbl);
+                      setSelectedBBLs([bbl]);
                       setSearchInput(s.properties.label);
                     }
                     setSuggestions([]);
@@ -304,7 +325,7 @@ export default function Sidebar() {
         {activeTab === 'chat' ? (
           <div className="h-full flex flex-col animate-in fade-in duration-300">
             {/* CHAT INPUT AT TOP */}
-            <div className="p-4 bg-slate-50 border-b border-slate-100 sticky top-0 z-20 space-y-3 shadow-sm">
+            <div className="p-4 bg-slate-50 border-b border-slate-100 sticky top-0 z-20 space-y-3 shadow-sm no-print">
               <div className="flex items-center justify-between gap-2 mb-1">
                 <div className="flex gap-1 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
                   {(['developer', 'citizen', 'architect'] as const).map(p => (
@@ -390,7 +411,7 @@ export default function Sidebar() {
                 <Loader2 className="animate-spin text-blue-600 mb-2" size={32} />
                 <p className="text-sm text-slate-500 font-medium">Retrieving lot data...</p>
               </div>
-            ) : !selectedBBL ? (
+            ) : selectedBBLs.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center space-y-4 text-slate-400 py-20">
                 <div className="p-6 bg-slate-50 rounded-full border border-slate-100 shadow-inner">
                   <BookOpen size={48} className="text-slate-300" />
@@ -402,6 +423,14 @@ export default function Sidebar() {
               </div>
             ) : (
               <div className="p-4 space-y-6">
+                {/* Printable Report Header */}
+                <div className="report-header">
+                  <h1>Zoning Feasibility Report</h1>
+                  <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">
+                    Generated: {new Date().toLocaleDateString()} | BBL: {lotData?.bbl}
+                  </p>
+                </div>
+
                 {/* Header info - Always visible when lot is selected */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -414,7 +443,7 @@ export default function Sidebar() {
                   </div>
                   <div className="space-y-2">
                     <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-none">
-                      {lotData?.address || `Tax Lot ${selectedBBL}`}
+                      {lotData?.address}
                     </h2>
                     <div className="flex flex-wrap gap-2 pt-1">
                       {lotData?.zoningDistricts?.map((d: string) => (
@@ -491,14 +520,11 @@ export default function Sidebar() {
                           See More Details
                         </button>
                         <button 
-                          className="flex-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 px-3 py-2 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-1.5"
-                          onClick={() => {
-                            setActiveTab('chat');
-                            fetchAiSummary(lotData.zoningDistricts, "Please provide a quick executive summary of this lot's development potential and any key restrictions.");
-                          }}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm no-print"
+                          onClick={() => window.print()}
                         >
-                          <BookOpen size={12} />
-                          Quick Summarize
+                          <ChevronRight size={12} className="rotate-90" />
+                          Export Report
                         </button>
                       </div>
                     </div>
@@ -580,7 +606,7 @@ export default function Sidebar() {
                         <div className="space-y-2 pt-2">
                           <div className="flex flex-col text-[9px] text-slate-400 italic leading-relaxed bg-slate-50 p-2 rounded-lg">
                             <p className="mb-1 text-slate-500 font-bold">Status: Using External Portals</p>
-                            <p>DOB NOW manages UI state internally, preventing direct BBL links. Use the BIS link above for historical property profiles, or search BBL <span className="font-mono text-slate-600 bg-slate-200 px-1 rounded">{selectedBBL}</span> manually on DOB NOW.</p>
+                            <p>DOB NOW manages UI state internally, preventing direct BBL links. Use the BIS link above for historical property profiles, or search BBL <span className="font-mono text-slate-600 bg-slate-200 px-1 rounded">{selectedBBLs[0]}</span> manually on DOB NOW.</p>
                           </div>
                         </div>
                       </div>
@@ -636,11 +662,11 @@ export default function Sidebar() {
                             <div className="w-1.5 h-1.5 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
                             Building Simulation
                           </h3>
-                          <p className="text-[10px] text-slate-400 font-medium">Configure floors to test bulk & FAR limits</p>
+                          <p className="text-[10px] text-slate-400 font-medium no-print">Configure floors to test bulk & FAR limits</p>
                         </div>
                         <button 
                           onClick={addFloor}
-                          className="bg-white border border-slate-200 text-blue-600 p-2 rounded-xl transition-all shadow-sm hover:shadow-md hover:border-blue-200 active:scale-95"
+                          className="bg-white border border-slate-200 text-blue-600 p-2 rounded-xl transition-all shadow-sm hover:shadow-md hover:border-blue-200 active:scale-95 no-print"
                         >
                           <Plus size={16} />
                         </button>
@@ -703,8 +729,8 @@ export default function Sidebar() {
                       </div>
 
                       <div className="pt-4 border-t border-slate-100/80 space-y-3 relative z-10">
-                        <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest px-1">Scenario Blueprints</p>
-                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                        <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest px-1 no-print">Scenario Blueprints</p>
+                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide no-print">
                           {(lotData?.zoningDistricts?.some((d: string) => d.startsWith('R') || d.startsWith('C'))) && (
                             <>
                               <button 
@@ -752,7 +778,7 @@ export default function Sidebar() {
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-slate-100/80 space-y-3 relative z-10">
+                      <div className="pt-4 border-t border-slate-100/80 space-y-3 relative z-10 no-print">
                         <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest px-1">Zoning Incentives</p>
                         <div className="grid grid-cols-2 gap-3">
                           <button 
