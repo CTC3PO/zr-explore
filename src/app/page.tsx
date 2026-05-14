@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Map from "@/components/Map";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
+import ScenarioOverlay from "@/components/ScenarioOverlay";
 import { DiscoveryWizard } from "@/components/DiscoveryWizard";
 import { Menu, X, ChevronUp, ChevronDown, HelpCircle } from "lucide-react";
 import { useZoning } from "@/context/ZoningContext";
@@ -105,6 +106,7 @@ export default function Home() {
         ${selectedBBLs.length > 0 ? 'h-[55vh] md:h-full' : 'h-full'}
       `}>
         <Map />
+        <ScenarioOverlay />
         
         {/* Welcome overlay when no lot selected */}
         {selectedBBLs.length === 0 && (

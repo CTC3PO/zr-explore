@@ -249,7 +249,7 @@ export default function Sidebar() {
       if (data.error) throw new Error(data.error);
       
       let mainText = data.response;
-      const followUpMatch = mainText.match(/\[FOLLOW_UPS:\s*(\[.*?\])\]/s);
+      const followUpMatch = mainText.match(/\[FOLLOW_UPS:\s*(\[[\s\S]*?\])\]/);
       
       if (followUpMatch) {
         try {
@@ -939,14 +939,6 @@ export default function Sidebar() {
                   <div className="space-y-6 animate-in fade-in duration-300">
                     <MassingPreview floors={floorsList} lotArea={lotData?.metadata?.lotArea || 2500} massingProfile={massingProfile} />
 
-                    {/* Scenario Comparison */}
-                    <ScenarioComparison
-                      lotArea={lotData?.metadata?.lotArea || 0}
-                      maxResidFAR={parseFloat(lotData?.metadata?.maxResidFAR) || 0}
-                      maxCommFAR={parseFloat(lotData?.metadata?.maxCommFAR) || 0}
-                      currentFloors={floorsList}
-                      zoningDistrict={lotData?.zoningDistricts?.[0] || ""}
-                    />
                     
                     <div className="space-y-6 bg-slate-50/50 p-5 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
                       {/* Decorative background element */}
@@ -1024,54 +1016,15 @@ export default function Sidebar() {
                         ))}
                       </div>
 
-                      <div className="pt-4 border-t border-slate-100/80 space-y-3 relative z-10">
-                        <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest px-1 no-print">Scenario Blueprints</p>
-                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide no-print">
-                          {(lotData?.zoningDistricts?.some((d: string) => d.startsWith('R') || d.startsWith('C'))) && (
-                            <>
-                              <button 
-                                onClick={() => {
-                                  const area = Math.round((lotData?.metadata?.lotArea || 2000) * 0.8);
-                                  setFloorsList([{ id: 1, area, use: 'residential' }, { id: 2, area, use: 'residential' }, { id: 3, area, use: 'residential' }]);
-                                  setApplyFresh(false);
-                                  setApplyTransit(false);
-                                }}
-                                className="flex-none bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 px-4 py-2 rounded-xl text-[10px] font-bold transition-all shadow-sm whitespace-nowrap"
-                              >
-                                Residential Townhouse
-                              </button>
-                              <button 
-                                onClick={() => {
-                                  const area = Math.round((lotData?.metadata?.lotArea || 2000) * 0.5);
-                                  const newFloors = Array.from({length: 12}, (_, i) => ({ 
-                                    id: Date.now() + i, 
-                                    area, 
-                                    use: i === 0 ? 'commercial' : 'residential' as any 
-                                  }));
-                                  setFloorsList(newFloors);
-                                  setApplyFresh(true);
-                                  setApplyTransit(true);
-                                }}
-                                className="flex-none bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-[10px] font-bold transition-all shadow-lg shadow-blue-500/20 whitespace-nowrap"
-                              >
-                                Mixed MIH (1F C + 11F R)
-                              </button>
-                            </>
-                          )}
-                          {(lotData?.zoningDistricts?.some((d: string) => d.startsWith('C') || d.startsWith('M'))) && (
-                            <button 
-                              onClick={() => {
-                                const area = Math.round((lotData?.metadata?.lotArea || 2000) * 0.9);
-                                const newFloors = Array.from({length: 8}, (_, i) => ({ id: Date.now() + i, area, use: 'commercial' as any }));
-                                setFloorsList(newFloors);
-                                setApplyTransit(false);
-                              }}
-                              className="flex-none bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-[10px] font-bold transition-all shadow-lg shadow-amber-500/20 whitespace-nowrap"
-                            >
-                              Commercial Office
-                            </button>
-                          )}
-                        </div>
+                      <div className="pt-4 border-t border-slate-100/80 space-y-3 relative z-10 no-print">
+                        <ScenarioComparison
+                          lotArea={lotData?.metadata?.lotArea || 0}
+                          maxResidFAR={farBreakdown.base}
+                          maxCommFAR={parseFloat(lotData?.metadata?.maxCommFAR) || 0}
+                          currentFloors={floorsList}
+                          zoningDistrict={lotData?.zoningDistricts?.[0] || ""}
+                          onApplyScenario={(newFloors) => setFloorsList(newFloors)}
+                        />
                       </div>
 
                       <div className="pt-4 border-t border-slate-100/80 space-y-3 relative z-10 no-print">

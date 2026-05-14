@@ -22,6 +22,7 @@ interface ScenarioComparisonProps {
   maxCommFAR: number;
   currentFloors: Floor[];
   zoningDistrict: string;
+  onApplyScenario?: (floors: Floor[]) => void;
 }
 
 function buildScenarioFloors(
@@ -32,7 +33,7 @@ function buildScenarioFloors(
 ): Floor[] {
   const count = Math.max(1, Math.round(totalSF / floorArea));
   return Array.from({ length: count }, (_, i) => ({
-    id: i + 1,
+    id: Date.now() + i,
     area: floorArea,
     use: i === 0 && groundUse ? groundUse : use,
   }));
@@ -44,8 +45,9 @@ export default function ScenarioComparison({
   maxCommFAR,
   currentFloors,
   zoningDistrict,
+  onApplyScenario,
 }: ScenarioComparisonProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
 
   if (!lotArea || !maxResidFAR) return null;
 
@@ -83,13 +85,13 @@ export default function ScenarioComparison({
     // MIH bonus
     {
       label: "Max w/ MIH Bonus",
-      tag: `FAR ${maxWithMIH.toFixed(2)}`,
+      tag: `FAR ${(maxResidFAR + mihBonus).toFixed(2)}`,
       tagColor: "bg-blue-50 text-blue-700 border-blue-200",
-      floors: buildScenarioFloors(maxWithMIH * lotArea, floorPlate, "residential", "community_facility"),
+      floors: buildScenarioFloors(maxWithMIH * lotArea, Math.round(lotArea * 0.5), "residential", "community_facility"),
       farUsed: parseFloat(maxWithMIH.toFixed(2)),
       maxFar: maxWithMIH,
       totalSF: Math.round(maxWithMIH * lotArea),
-      floors_count: Math.max(1, Math.round((maxWithMIH * lotArea) / floorPlate)),
+      floors_count: Math.max(1, Math.round((maxWithMIH * lotArea) / Math.round(lotArea * 0.5))),
     },
     // Mixed-use commercial ground
     ...(zoningDistrict?.startsWith("C") || zoningDistrict?.startsWith("R")
@@ -109,19 +111,16 @@ export default function ScenarioComparison({
   ];
 
   return (
-    <div className="rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+    <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm bg-white">
       {/* Toggle header */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50/50 hover:bg-slate-100 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full shadow-[0_0_6px_rgba(99,102,241,0.5)]" />
-          <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.15em]">
-            Scenario Comparison
-          </span>
-          <span className="text-[8px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
-            {scenarios.length} scenarios
+          <div className="w-1.5 h-1.5 bg-blue-600 rounded-full shadow-[0_0_6px_rgba(37,99,235,0.5)]" />
+          <span className="text-[10px] font-black text-slate-700 uppercase tracking-[0.15em]">
+            Scenario Comparison & Blueprints
           </span>
         </div>
         {isOpen ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
@@ -129,8 +128,7 @@ export default function ScenarioComparison({
 
       {isOpen && (
         <div className="border-t border-slate-100">
-          {/* Scrollable side-by-side grid */}
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto custom-scrollbar">
             <div className="flex gap-0 min-w-max">
               {scenarios.map((sc, idx) => (
                 <div
@@ -138,18 +136,34 @@ export default function ScenarioComparison({
                   className="flex flex-col w-48 border-r border-slate-100 last:border-r-0"
                 >
                   {/* Scenario header */}
-                  <div className="px-3 pt-3 pb-2 bg-slate-50/50 space-y-1 border-b border-slate-100">
-                    <span className={`inline-flex text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${sc.tagColor}`}>
-                      {sc.tag}
-                    </span>
+                  <div className="px-3 pt-3 pb-2 bg-slate-50/30 space-y-1 border-b border-slate-50">
+                    <div className="flex justify-between items-center">
+                      <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${sc.tagColor}`}>
+                        {sc.tag}
+                      </span>
+                      {sc.farUsed <= sc.maxFar ? (
+                        <span className="text-[7px] font-bold text-emerald-600 bg-emerald-50 px-1 rounded">COMPLIANT</span>
+                      ) : (
+                        <span className="text-[7px] font-bold text-red-600 bg-red-50 px-1 rounded">OVER LIMIT</span>
+                      )}
+                    </div>
                     <p className="text-[9px] font-bold text-slate-600 leading-tight">{sc.label}</p>
                   </div>
 
                   {/* Massing visual */}
-                  <div className="p-2 bg-white">
-                    <div className="h-40 overflow-hidden rounded-xl">
+                  <div className="p-2 bg-white flex flex-col gap-2">
+                    <div className="h-40 overflow-hidden rounded-xl border border-slate-50">
                       <MassingPreview floors={sc.floors} lotArea={lotArea} />
                     </div>
+                    
+                    {idx !== 0 && onApplyScenario && (
+                      <button
+                        onClick={() => onApplyScenario(sc.floors)}
+                        className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-black uppercase tracking-wider rounded-lg transition-all shadow-sm shadow-blue-500/20 active:scale-95"
+                      >
+                        Generate Scenario
+                      </button>
+                    )}
                   </div>
 
                   {/* Stats */}
@@ -170,12 +184,6 @@ export default function ScenarioComparison({
                       <span className="text-[8px] text-slate-400 uppercase font-bold">Total SF</span>
                       <span className="text-[10px] font-bold text-slate-700 tabular-nums">
                         {sc.totalSF.toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-baseline">
-                      <span className="text-[8px] text-slate-400 uppercase font-bold">Floors</span>
-                      <span className="text-[10px] font-bold text-slate-700 tabular-nums">
-                        {sc.floors_count}
                       </span>
                     </div>
                   </div>
