@@ -75,6 +75,29 @@ export default function Map() {
       // Add 3D Buildings context layer (Optional NYC footprints if available)
       // For now, focus on the selected lot extrusion
       
+      // Add Context Buildings (3D Footprints)
+      map.current?.addSource('context-buildings', {
+        type: 'vector',
+        tiles: ['https://tiles.arcgis.com/tiles/yG5s3afENB5iO9Jp/arcgis/rest/services/NYC_Building_Footprints/VectorTileServer/tile/{z}/{y}/{x}.pbf']
+      });
+
+      map.current?.addLayer({
+        id: 'context-buildings-layer',
+        type: 'fill-extrusion',
+        source: 'context-buildings',
+        'source-layer': 'BuildingFootprint',
+        minzoom: 15.5,
+        paint: {
+          'fill-extrusion-color': '#f1f5f9',
+          'fill-extrusion-height': ['*', ['get', 'heightroof'], 0.3048], // ft to m
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 0.6
+        },
+        layout: {
+          visibility: 'none' // Hidden by default, shown in 3D mode
+        }
+      });
+
       // Add Global Tax Lots (Vector)
       map.current?.addSource('tax-lots', {
         type: 'vector',
@@ -108,9 +131,9 @@ export default function Map() {
         type: 'fill',
         source: 'selected-lot',
         paint: {
-          'fill-color': '#2563eb',
-          'fill-opacity': 0.3,
-          'fill-outline-color': '#1d4ed8'
+          'fill-color': ['get', 'district_color'],
+          'fill-opacity': 0.4,
+          'fill-outline-color': '#1e293b'
         }
       });
 
@@ -192,7 +215,7 @@ export default function Map() {
         const response = await fetch(`https://planninglabs.carto.com/api/v2/sql?q=${encodeURIComponent(query)}`);
         const data = await response.json();
         if (data.rows && data.rows.length > 0) {
-          const bbl = data.rows[0].bbl;
+          const bbl = String(data.rows[0].bbl);
           const isMulti = e.originalEvent.shiftKey || e.originalEvent.metaKey;
           
           if (isMulti) {
@@ -321,6 +344,9 @@ export default function Map() {
       if (map.current.getLayer('building-envelope')) {
         map.current.setLayoutProperty('building-envelope', 'visibility', showEnvelope ? 'visible' : 'none');
       }
+      if (map.current.getLayer('context-buildings-layer')) {
+        map.current.setLayoutProperty('context-buildings-layer', 'visibility', 'visible');
+      }
     } else {
       map.current.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
       if (map.current.getLayer('proposed-building')) {
@@ -328,6 +354,9 @@ export default function Map() {
       }
       if (map.current.getLayer('building-envelope')) {
         map.current.setLayoutProperty('building-envelope', 'visibility', 'none');
+      }
+      if (map.current.getLayer('context-buildings-layer')) {
+        map.current.setLayoutProperty('context-buildings-layer', 'visibility', 'none');
       }
     }
   }, [mapMode, showEnvelope]);
@@ -374,11 +403,22 @@ export default function Map() {
           
           setLotGeometry(combined);
 
+          // Determine color based on district
+          const district = lotData?.zoningDistricts?.[0]?.toUpperCase() || "";
+          const districtColor = district.startsWith('M') ? '#a855f7' : // Purple
+                               district.startsWith('C') ? '#ef4444' : // Red
+                               district.startsWith('R') ? '#facc15' : // Yellow
+                               '#2563eb'; // Blue default
+
           const source = map.current?.getSource("selected-lot") as maplibregl.GeoJSONSource;
           if (source) {
             source.setData({
               type: "FeatureCollection",
-              features: geoms.map((g: any) => ({ type: "Feature", geometry: g, properties: {} }))
+              features: geoms.map((g: any) => ({ 
+                type: "Feature", 
+                geometry: g, 
+                properties: { district_color: districtColor } 
+              }))
             });
             
             // Fit map to bounds of all lots
@@ -392,7 +432,7 @@ export default function Map() {
       }
     };
     updateHighlight();
-  }, [selectedBBLs]);
+  }, [selectedBBLs, lotData]);
 
   return (
     <div className="h-full w-full relative bg-slate-100 overflow-hidden">

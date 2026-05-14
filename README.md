@@ -12,8 +12,8 @@ Most zoning tools function as simple digital maps (Explorers). ZR-Explore expand
 
 1. Explorer: Search any address or tax lot in NYC to view live zoning districts, commercial overlays, and active building permits.
 2. Builder: Unlike static maps, you can "play" with the site. Add floors, change use types (Residential vs. Commercial), and instantly see how much square footage you can fit.
-3. Visualizer: Every input in the Builder is rendered as a 3D building on the map. It also shows a "Theoretical Max" wireframe, helping you see the volume limit allowed by law.
-4. AI Consultant: A built-in expert that answers questions like "Can I build a cafe here?" or "What are the height rules for this area?" It provides specific citations and decodes technical jargon into relatable terms.
+3. Visualizer: Every input in the Builder is rendered as a 3D building on the map. It also shows a "Theoretical Max" wireframe and **3D Context Buildings** (neighboring structures) to provide real-world scale.
+4. AI Consultant: A multi-turn conversational expert that answers questions like "Can I build a cafe here?" or "What are the height rules for this area?" It provides specific citations and decodes technical jargon into relatable terms.
 
 ## Stakeholders
 

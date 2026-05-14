@@ -207,10 +207,12 @@ export default function Sidebar() {
     }
   }, [lotData?.zoningDistricts?.[0]]);
 
-  // Auto-scroll to bottom of chat on new messages
+  // Auto-scroll to bottom of chat on new messages or tab switch
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages, chatLoading]);
+    if (activeTab === 'chat') {
+      chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, chatLoading, activeTab]);
 
   const fetchAiSummary = async (districts: string[], q?: string) => {
     const userText = q?.trim();
@@ -272,27 +274,32 @@ export default function Sidebar() {
 
   const copyToClipboard = (text: string) => navigator.clipboard.writeText(text).catch(() => {});
 
-  const getMaxFarWithBonuses = () => {
-    if (!lotData?.metadata?.maxResidFAR) return 0;
+  const getFarBreakdown = () => {
+    if (!lotData?.metadata?.maxResidFAR) return { base: 0, mih: 0, fresh: 0, total: 0 };
     let base = parseFloat(lotData.metadata.maxResidFAR);
     
     // MIH Bonus (Approximate based on NYC ZR)
-    // R10/C5/C6-4 -> 12.0, R9 -> 8.0, R8 -> 7.2, etc.
-    let bonus = 0;
-    if (applyTransit) { // Using applyTransit as MIH toggle
-      if (base >= 10) bonus = 2.0;
-      else if (base >= 7.5) bonus = 0.48;
-      else if (base >= 6.0) bonus = 1.18;
-      else bonus = base * 0.2; // Generic 20% bonus
+    let mihBonus = 0;
+    if (applyTransit) { 
+      if (base >= 10) mihBonus = 2.0;
+      else if (base >= 7.5) mihBonus = 0.48;
+      else if (base >= 6.0) mihBonus = 1.18;
+      else mihBonus = base * 0.2; 
     }
     
     // FRESH Bonus (up to 2.0 FAR)
     const freshBonus = applyFresh ? Math.min(2.0, base * 0.2) : 0;
     
-    return base + bonus + freshBonus;
+    return {
+      base,
+      mih: mihBonus,
+      fresh: freshBonus,
+      total: base + mihBonus + freshBonus
+    };
   };
 
-  const maxAllowedFAR = getMaxFarWithBonuses();
+  const farBreakdown = getFarBreakdown();
+  const maxAllowedFAR = farBreakdown.total;
 
   const [suggestions, setSuggestions] = useState<any[]>([]);
 
@@ -341,7 +348,8 @@ export default function Sidebar() {
     return "https://zr.planning.nyc.gov/";
   };
 
-  const getBisLink = (bbl: string) => {
+  const getBisLink = (val: any) => {
+    const bbl = String(val);
     if (!bbl || bbl.length !== 10) return "https://a810-bisweb.nyc.gov/bisweb/bispi00.jsp";
     const boro = bbl.substring(0, 1);
     const block = parseInt(bbl.substring(1, 6), 10);
@@ -389,7 +397,7 @@ export default function Sidebar() {
                   onClick={() => {
                     const bbl = s.properties.addendum?.pad?.bbl || s.properties.pad_bbl || s.properties.bbl || s.properties.id;
                     if (bbl) {
-                      setSelectedBBLs([bbl]);
+                      setSelectedBBLs([String(bbl)]);
                       setSearchInput(s.properties.label);
                     }
                     setSuggestions([]);
@@ -447,7 +455,7 @@ export default function Sidebar() {
                   {selectedBBLs[0] && (
                     <div className="flex-none flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded-full text-[9px] font-bold whitespace-nowrap">
                       <span className="opacity-60">📍</span>
-                      <span>{selectedBBLs.length > 1 ? `${selectedBBLs.length} lots` : `BBL ${selectedBBLs[0].replace(/^(\d)(\d{5})(\d{4})$/, '$1-$2-$3')}`}</span>
+                      <span>{selectedBBLs.length > 1 ? `${selectedBBLs.length} lots` : `BBL ${String(selectedBBLs[0]).replace(/^(\d)(\d{5})(\d{4})$/, '$1-$2-$3')}`}</span>
                     </div>
                   )}
                   {/* Zoning District(s) */}
@@ -1095,32 +1103,6 @@ export default function Sidebar() {
                           </button>
                         </div>
 
-                        {/* Wide Street toggle + Shape badge */}
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setIsWideStreet(!isWideStreet)}
-                            className={`flex-1 flex items-center justify-between p-3 rounded-xl border transition-all ${isWideStreet ? 'bg-violet-50 border-violet-200 text-violet-700 shadow-sm' : 'bg-white border-slate-200 text-slate-400'}`}
-                          >
-                            <div className="flex flex-col items-start">
-                              <span className="text-[10px] font-black tracking-tighter">Wide Street</span>
-                              <span className="text-[8px] opacity-60 font-bold uppercase">≥75 ft</span>
-                            </div>
-                            {isWideStreet ? <div className="w-2 h-2 bg-violet-500 rounded-full shadow-[0_0_8px_rgba(139,92,246,0.5)]" /> : <div className="w-2 h-2 bg-slate-100 rounded-full border border-slate-200" />}
-                          </button>
-
-                          {massingProfile && (
-                            <div
-                              title={massingProfile.shapeDescription}
-                              className="flex flex-col items-center justify-center p-3 rounded-xl border border-indigo-100 bg-indigo-50 min-w-[64px] cursor-help"
-                            >
-                              <span className="text-[14px] font-black text-indigo-700 tracking-tighter leading-none">
-                                {massingProfile.massingShape}
-                              </span>
-                              <span className="text-[7px] font-bold text-indigo-400 uppercase tracking-widest mt-0.5">shape</span>
-                            </div>
-                          )}
-                        </div>
-
                         {massingProfile && (
                           <p className="text-[8px] text-slate-400 italic px-1 leading-snug">
                             Setback kicks in at {massingProfile.baseFloors}F ({massingProfile.baseHeightFt}ft) · {massingProfile.setbackFt}ft step-back required
@@ -1140,11 +1122,6 @@ export default function Sidebar() {
                               {totalCommArea > 0 && <span className="text-red-600">{totalCommArea.toLocaleString()} C</span>}
                               {totalCFArea > 0 && <span className="text-blue-600">{totalCFArea.toLocaleString()} CF</span>}
                             </div>
-                            <div className="pt-1">
-                              <p className="text-[9px] font-bold text-blue-600/80 italic leading-snug">
-                                {translateArea(totalBuildArea)}
-                              </p>
-                            </div>
                           </div>
                         </div>
                         <div className="space-y-1 text-right">
@@ -1156,11 +1133,6 @@ export default function Sidebar() {
                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
                               {floorsList.length} FLOORS
                             </p>
-                            <div className="pt-1">
-                              <p className="text-[9px] font-bold text-blue-600/80 italic leading-snug">
-                                {translateHeight(floorsList.length * 11.5)}
-                              </p>
-                            </div>
                           </div>
                         </div>
                       </div>
@@ -1168,15 +1140,22 @@ export default function Sidebar() {
                       <div className="pt-5 border-t border-slate-100 flex justify-between items-center relative z-10">
                         <div className="space-y-1">
                           <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Scenario / Max FAR</p>
-                          <div className="flex items-center gap-2">
-                            <p className={`text-lg font-black tabular-nums ${parseFloat(calculatedFAR) > maxAllowedFAR ? 'text-red-600' : 'text-blue-600'}`}>
-                              {calculatedFAR}
-                            </p>
-                            <span className="text-slate-300 font-bold">/</span>
-                            <p className="text-sm font-bold text-slate-400 tabular-nums">
-                              {maxAllowedFAR.toFixed(2)}
-                            </p>
-                          </div>
+                           <div className="flex flex-col">
+                             <div className="flex items-center gap-2">
+                               <p className={`text-lg font-black tabular-nums ${parseFloat(calculatedFAR) > maxAllowedFAR ? 'text-red-600' : 'text-blue-600'}`}>
+                                 {calculatedFAR}
+                               </p>
+                               <span className="text-slate-300 font-bold">/</span>
+                               <p className="text-sm font-bold text-slate-400 tabular-nums">
+                                 {maxAllowedFAR.toFixed(2)}
+                               </p>
+                             </div>
+                             <p className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">
+                               {farBreakdown.base.toFixed(2)} Base 
+                               {farBreakdown.mih > 0 && ` + ${farBreakdown.mih.toFixed(2)} MIH`}
+                               {farBreakdown.fresh > 0 && ` + ${farBreakdown.fresh.toFixed(2)} FRESH`}
+                             </p>
+                           </div>
                         </div>
                         {totalCommArea > 0 && lotData?.metadata?.maxCommFAR && (
                           <div className="text-right">
