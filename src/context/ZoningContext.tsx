@@ -23,6 +23,8 @@ interface ZoningContextType {
   setFloorGeometries: (geoms: Record<number, any>) => void;
   mapMode: "2D" | "3D";
   setMapMode: (mode: "2D" | "3D") => void;
+  isWideStreet: boolean;
+  setIsWideStreet: (v: boolean) => void;
 }
 
 const ZoningContext = createContext<ZoningContextType | undefined>(undefined);
@@ -33,6 +35,7 @@ export function ZoningProvider({ children }: { children: React.ReactNode }) {
   const [lotGeometry, setLotGeometry] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState<"explorer" | "builder" | "chat" | "matrix">("explorer");
   const [mapMode, setMapMode] = useState<"2D" | "3D">("2D");
+  const [isWideStreet, setIsWideStreet] = useState<boolean>(false);
   const [floorsList, setFloorsList] = useState<Floor[]>([
     { id: 1, area: 2000, use: 'residential' },
     { id: 2, area: 2000, use: 'residential' }
@@ -54,7 +57,9 @@ export function ZoningProvider({ children }: { children: React.ReactNode }) {
       floorGeometries,
       setFloorGeometries,
       mapMode,
-      setMapMode
+      setMapMode,
+      isWideStreet,
+      setIsWideStreet
     }}>
       {children}
     </ZoningContext.Provider>

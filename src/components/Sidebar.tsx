@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useZoning } from "@/context/ZoningContext";
-import { Info, Map as MapIcon, BookOpen, ChevronRight, Loader2, Plus, ArrowRight, Search, Copy, X } from "lucide-react";
+import { Info, Map as MapIcon, BookOpen, ChevronRight, Loader2, Plus, Search, Copy, X, Trash2, Bot, User } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import MassingPreview from "./MassingPreview";
 import ScratchPad from "./ScratchPad";
 import { GlossaryTooltip } from "./GlossaryTooltip";
 import { UseGroupMatrix } from "./UseGroupMatrix";
 import { translateArea, translateHeight } from "@/utils/communityTranslations";
+import ScenarioComparison from "./ScenarioComparison";
+import { computeMassingProfile } from "@/utils/massingLogic";
 
 export default function Sidebar() {
   const { 
@@ -17,13 +19,15 @@ export default function Sidebar() {
     activeTab, setActiveTab,
     floorsList, setFloorsList,
     floorGeometries, setFloorGeometries,
-    mapMode, setMapMode 
+    mapMode, setMapMode,
+    isWideStreet, setIsWideStreet
   } = useZoning();
   
   const [loading, setLoading] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
   const [activeScratchFloor, setActiveScratchFloor] = useState<number | null>(null);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
   const [searchInput, setSearchInput] = useState("");
   const [question, setQuestion] = useState("");
   const [persona, setPersona] = useState<"developer" | "citizen" | "architect">("developer");
@@ -80,6 +84,19 @@ export default function Sidebar() {
   useEffect(() => {
     setShowDetails(false);
   }, [activeTab]);
+
+  // Compute massing profile for shape badge + MassingPreview
+  const massingProfile = useMemo(() => {
+    if (!lotData) return null;
+    const lotFrontFt = parseFloat(lotData.metadata?.lotFront) || Math.sqrt(parseFloat(lotData.metadata?.lotArea) || 2500);
+    const lotDepthFt = parseFloat(lotData.metadata?.lotDepth) || lotFrontFt;
+    return computeMassingProfile({
+      zoningDistrict: lotData.zoningDistricts?.[0] || 'R6',
+      lotFrontFt,
+      lotDepthFt,
+      isWideStreet,
+    });
+  }, [lotData, isWideStreet]);
 
   useEffect(() => {
     if (selectedBBLs.length === 0) {
@@ -138,55 +155,122 @@ export default function Sidebar() {
     fetchData();
   }, [selectedBBLs, setLotData]);
 
-  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([
-    "What is the maximum allowed FAR?",
-    "Does this qualify for FRESH or MIH?",
-    "Explain the rules in plain English.",
-    "What are the height and setback rules?",
-    "Can I build residential here?"
-  ]);
+  // Generate context-aware questions based on the zoning district
+  const getSmartQuestions = (districts: string[]): string[] => {
+    const d = (districts[0] || '').toUpperCase();
+    const isManufacturing = d.startsWith('M');
+    const isCommercial = d.startsWith('C');
+    const isHighDensity = /R[89]|R10|C6|C5/.test(d);
+    const isMidDensity = /R[67]|C[34]/.test(d);
+
+    if (isManufacturing) return [
+      'What uses are allowed in this M district?',
+      'Can this lot be rezoned for residential?',
+      'What is the minimum lot size for manufacturing here?',
+      'Are there any community facility allowances?',
+    ];
+    if (isCommercial) return [
+      'What residential uses are permitted on the ground floor?',
+      'What is the commercial FAR limit here?',
+      'Can I convert this to mixed-use?',
+      'What signage and retail rules apply?',
+    ];
+    if (isHighDensity) return [
+      'What is the exact height limit and setback rule?',
+      'How many units can I build at max FAR?',
+      'Does MIH apply here and what bonus FAR does it unlock?',
+      'What is the Sky Exposure Plane for this district?',
+    ];
+    if (isMidDensity) return [
+      'What is the maximum FAR and how many floors does that translate to?',
+      'Can I build a mixed-use building here?',
+      'Does FRESH food store bonus apply?',
+      'What is the required street wall height?',
+    ];
+    // Low-density residential default
+    return [
+      'What is the max FAR and what does it allow?',
+      'What are the height and setback rules?',
+      'Can I add an ADU or accessory dwelling here?',
+      'Are there any affordable housing bonuses available?',
+    ];
+  };
+
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(
+    getSmartQuestions([])
+  );
+
+  // Regenerate smart questions when lot changes
+  useEffect(() => {
+    if (lotData?.zoningDistricts?.length) {
+      setSuggestedQuestions(getSmartQuestions(lotData.zoningDistricts));
+    }
+  }, [lotData?.zoningDistricts?.[0]]);
+
+  // Auto-scroll to bottom of chat on new messages
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages, chatLoading]);
 
   const fetchAiSummary = async (districts: string[], q?: string) => {
+    const userText = q?.trim();
+    if (!userText) return;
+
+    // Push user message immediately
+    const newUserMsg = { role: 'user' as const, text: userText };
+    setChatMessages(prev => [...prev, newUserMsg]);
+    setQuestion("");
     setChatLoading(true);
+
     try {
       const personaContext = {
-        developer: "Focus on buildable area, FAR bonuses, and investment feasibility.",
-        citizen: "Focus on community impact, affordable housing, and height in plain English.",
-        architect: "Focus on technical zoning resolution citations, massing, and setbacks."
+        developer: "Focus on buildable area, FAR bonuses, density, and investment feasibility. Always state ROI-relevant numbers.",
+        citizen: "Focus on community impact, height in relatable terms, affordable housing, and quality of life. Avoid jargon — translate everything.",
+        architect: "Focus on technical ZR citations, massing constraints, setbacks, sky exposure plane, and bulk regulations."
       };
+
+      // Send the full conversation history (excluding the user message we just added)
+      const historyToSend = chatMessages.map(m => ({ role: m.role, text: m.text }));
 
       const response = await fetch("/api/chat", {
         method: "POST",
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          message: q, 
+          message: userText, 
           zoningDistricts: districts,
-          context: personaContext[persona]
+          context: personaContext[persona],
+          lotContext: lotData,          // ← full lot data for lot-specific answers
+          history: historyToSend,       // ← prior conversation for multi-turn context
         }),
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error);
       
       let mainText = data.response;
-      const followUpMatch = mainText.match(/\[FOLLOW_UPS:\s*(\[.*?\])\]/);
+      const followUpMatch = mainText.match(/\[FOLLOW_UPS:\s*(\[.*?\])\]/s);
       
       if (followUpMatch) {
         try {
           const questions = JSON.parse(followUpMatch[1]);
-          setSuggestedQuestions(questions);
+          if (Array.isArray(questions) && questions.length > 0) {
+            setSuggestedQuestions(questions.slice(0, 4));
+          }
           mainText = mainText.replace(followUpMatch[0], "").trim();
         } catch (e) {
           console.warn("Failed to parse follow-ups:", e);
         }
       }
       
-      setAiSummary(mainText);
+      setChatMessages(prev => [...prev, { role: 'ai', text: mainText }]);
     } catch (error: any) {
       console.error("Chat error:", error);
-      setAiSummary(`Consultant Error: ${error.message}. Please check your AI keys.`);
+      setChatMessages(prev => [...prev, { role: 'ai', text: `⚠️ ${error.message}. Please check your API keys in .env.local.` }]);
     } finally {
       setChatLoading(false);
     }
   };
+
+  const copyToClipboard = (text: string) => navigator.clipboard.writeText(text).catch(() => {});
 
   const getMaxFarWithBonuses = () => {
     if (!lotData?.metadata?.maxResidFAR) return 0;
@@ -326,49 +410,96 @@ export default function Sidebar() {
       <div className="flex-1 overflow-y-auto scrollbar-hide">
         {activeTab === 'chat' ? (
           <div className="h-full flex flex-col animate-in fade-in duration-300">
-            {/* CHAT INPUT AT TOP */}
-            <div className="p-4 bg-slate-50 border-b border-slate-100 sticky top-0 z-20 space-y-3 shadow-sm no-print">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <div className="flex gap-1 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+            {/* CHAT HEADER */}
+            <div className="p-3 bg-white border-b border-slate-100 sticky top-0 z-20 shadow-sm no-print">
+              <div className="flex items-center justify-between gap-2">
+                {/* Persona Switcher */}
+                <div className="flex gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200">
                   {(['developer', 'citizen', 'architect'] as const).map(p => (
                     <button
                       key={p}
                       onClick={() => setPersona(p)}
-                      className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter transition-all ${persona === p ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                      className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter transition-all ${
+                        persona === p ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                      }`}
                     >
                       {p}
                     </button>
                   ))}
                 </div>
-                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest italic opacity-60">Consultant Mode</span>
-              </div>
-              
-              <div className="relative">
-                <input 
-                  type="text" 
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  placeholder="Ask any NYC zoning question..."
-                  className="w-full text-xs border border-slate-200 rounded-xl pl-3 pr-10 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm bg-white"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && question) fetchAiSummary(lotData?.zoningDistricts || [], question);
-                  }}
-                />
-                <button 
-                  onClick={() => fetchAiSummary(lotData?.zoningDistricts || [], question)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white p-1.5 rounded-lg hover:bg-blue-700 disabled:bg-slate-300 transition-colors"
-                  disabled={chatLoading || !question}
-                >
-                  <ChevronRight size={18} />
-                </button>
+                {/* Clear chat */}
+                {chatMessages.length > 0 && (
+                  <button
+                    onClick={() => setChatMessages([])}
+                    title="Clear conversation"
+                    className="flex items-center gap-1 text-[9px] font-bold text-slate-400 hover:text-red-500 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+                  >
+                    <Trash2 size={11} />
+                    Clear
+                  </button>
+                )}
               </div>
 
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {/* ── LOT SUMMARY STRIP ── only when lot is loaded */}
+              {lotData && selectedBBLs.length > 0 && (
+                <div className="flex gap-1.5 overflow-x-auto pb-1 pt-2 scrollbar-hide animate-in fade-in duration-500">
+                  {/* BBL */}
+                  {selectedBBLs[0] && (
+                    <div className="flex-none flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded-full text-[9px] font-bold whitespace-nowrap">
+                      <span className="opacity-60">📍</span>
+                      <span>{selectedBBLs.length > 1 ? `${selectedBBLs.length} lots` : `BBL ${selectedBBLs[0].replace(/^(\d)(\d{5})(\d{4})$/, '$1-$2-$3')}`}</span>
+                    </div>
+                  )}
+                  {/* Zoning District(s) */}
+                  {lotData.zoningDistricts?.slice(0, 2).map((d: string) => (
+                    <div key={d} className="flex-none flex items-center gap-1 bg-blue-600 text-white px-2 py-1 rounded-full text-[9px] font-black whitespace-nowrap">
+                      {d}
+                    </div>
+                  ))}
+                  {/* Built FAR */}
+                  {lotData.metadata?.builtFAR && (
+                    <div className="flex-none flex items-center gap-1 bg-slate-100 text-slate-600 border border-slate-200 px-2 py-1 rounded-full text-[9px] font-bold whitespace-nowrap">
+                      <span className="opacity-50">FAR</span>
+                      <span>{parseFloat(lotData.metadata.builtFAR).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {/* Max Residential FAR */}
+                  {lotData.metadata?.maxResidFAR && (
+                    <div className="flex-none flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-full text-[9px] font-bold whitespace-nowrap">
+                      <span className="opacity-60">Max</span>
+                      <span>{parseFloat(lotData.metadata.maxResidFAR).toFixed(1)}</span>
+                    </div>
+                  )}
+                  {/* Lot Area */}
+                  {lotData.metadata?.lotArea && (
+                    <div className="flex-none flex items-center gap-1 bg-slate-100 text-slate-500 border border-slate-200 px-2 py-1 rounded-full text-[9px] font-bold whitespace-nowrap">
+                      <span className="opacity-50">📐</span>
+                      <span>{parseInt(lotData.metadata.lotArea).toLocaleString()} sf</span>
+                    </div>
+                  )}
+                  {/* Year Built */}
+                  {lotData.metadata?.yearBuilt && lotData.metadata.yearBuilt !== '0' && (
+                    <div className="flex-none flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full text-[9px] font-bold whitespace-nowrap">
+                      <span className="opacity-60">🏗</span>
+                      <span>Built {lotData.metadata.yearBuilt}</span>
+                    </div>
+                  )}
+                  {/* Stories */}
+                  {lotData.metadata?.numFloors && lotData.metadata.numFloors !== '0' && (
+                    <div className="flex-none flex items-center gap-1 bg-slate-100 text-slate-500 border border-slate-200 px-2 py-1 rounded-full text-[9px] font-bold whitespace-nowrap">
+                      <span>{lotData.metadata.numFloors}F existing</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Suggested questions */}
+              <div className="flex gap-1.5 overflow-x-auto pb-1 pt-1.5 scrollbar-hide">
                 {suggestedQuestions.map(q => (
-                  <button 
+                  <button
                     key={q}
-                    onClick={() => { setQuestion(q); fetchAiSummary(lotData?.zoningDistricts || [], q); }}
-                    className="flex-none bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-bold text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-all shadow-sm whitespace-nowrap"
+                    onClick={() => fetchAiSummary(lotData?.zoningDistricts || [], q)}
+                    className="flex-none bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full text-[9px] font-bold text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-all whitespace-nowrap"
                   >
                     {q}
                   </button>
@@ -376,34 +507,149 @@ export default function Sidebar() {
               </div>
             </div>
 
-            {/* CHAT MESSAGES / RESULT */}
-            <div className="flex-1 p-4 space-y-4">
-              {!aiSummary && !chatLoading && (
-                <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 opacity-40">
-                  <BookOpen size={48} className="text-blue-300" />
-                  <div className="space-y-1">
-                    <p className="text-sm font-bold text-slate-600">AI Zoning Consultant</p>
-                    <p className="text-xs px-10">Ask about specific lots, generic rules, or development strategies.</p>
-                  </div>
+            {/* CONVERSATION THREAD */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Empty state */}
+              {chatMessages.length === 0 && !chatLoading && (
+                <div className="flex flex-col items-center py-6 text-center space-y-4">
+                  {selectedBBLs.length === 0 ? (
+                    /* No lot selected */
+                    <>
+                      <div className="p-4 bg-blue-50 rounded-full border border-blue-100">
+                        <Bot size={28} className="text-blue-400" />
+                      </div>
+                      <div className="space-y-1 px-4">
+                        <p className="text-xs font-bold text-slate-600">ZR-Scout is waiting</p>
+                        <p className="text-[10px] text-slate-400 leading-relaxed">
+                          Select a lot on the map to unlock lot-specific answers, citations, and feasibility advice.
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    /* Lot loaded — show district + smart question cards */
+                    <>
+                      <div className="flex items-center gap-2">
+                        <div className="p-3 bg-blue-600 rounded-2xl shadow-md shadow-blue-500/20">
+                          <Bot size={22} className="text-white" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-[11px] font-black text-slate-700">ZR-Scout is ready</p>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            {lotData?.zoningDistricts?.slice(0, 2).map((d: string) => (
+                              <span key={d} className="text-[9px] font-black text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-full">{d}</span>
+                            ))}
+                            <span className="text-[9px] text-slate-400">· {persona} mode</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <p className="text-[10px] text-slate-400 px-4 leading-relaxed">
+                        I know this lot's exact rules. Try one of these or ask anything:
+                      </p>
+
+                      {/* Smart question cards */}
+                      <div className="w-full space-y-1.5 px-1">
+                        {suggestedQuestions.map((q, i) => (
+                          <button
+                            key={i}
+                            onClick={() => fetchAiSummary(lotData?.zoningDistricts || [], q)}
+                            className="w-full text-left px-3 py-2.5 rounded-xl border border-slate-100 bg-white hover:border-blue-200 hover:bg-blue-50 transition-all group shadow-sm"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-blue-500 font-black opacity-60 group-hover:opacity-100">→</span>
+                              <span className="text-[10px] font-semibold text-slate-600 group-hover:text-blue-700 leading-tight">{q}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
+              {/* Message bubbles */}
+              {chatMessages.map((msg, idx) => (
+                <div
+                  key={idx}
+                  className={`flex gap-2.5 animate-in fade-in slide-in-from-bottom-2 duration-300 ${
+                    msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'
+                  }`}
+                >
+                  {/* Avatar */}
+                  <div className={`flex-none w-6 h-6 rounded-full flex items-center justify-center mt-0.5 shadow-sm ${
+                    msg.role === 'user' ? 'bg-slate-700' : 'bg-blue-600'
+                  }`}>
+                    {msg.role === 'user'
+                      ? <User size={11} className="text-white" />
+                      : <Bot size={11} className="text-white" />}
+                  </div>
+
+                  {/* Bubble */}
+                  <div className={`relative group max-w-[85%] ${
+                    msg.role === 'user' ? 'items-end' : 'items-start'
+                  } flex flex-col gap-1`}>
+                    <div className={`px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed ${
+                      msg.role === 'user'
+                        ? 'bg-slate-800 text-white rounded-tr-sm'
+                        : 'bg-white border border-slate-100 text-slate-700 rounded-tl-sm shadow-sm prose prose-xs prose-slate max-w-none prose-p:leading-relaxed prose-headings:mb-1 prose-headings:mt-3 prose-li:my-0.5'
+                    }`}>
+                      {msg.role === 'ai'
+                        ? <ReactMarkdown>{msg.text}</ReactMarkdown>
+                        : <span>{msg.text}</span>}
+                    </div>
+                    {/* Copy button — AI only */}
+                    {msg.role === 'ai' && (
+                      <button
+                        onClick={() => copyToClipboard(msg.text)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity self-start flex items-center gap-1 text-[9px] text-slate-400 hover:text-blue-500 px-1"
+                      >
+                        <Copy size={10} /> Copy
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* Inline typing indicator */}
               {chatLoading && (
-                <div className="flex flex-col items-center justify-center py-12 space-y-3">
-                  <div className="flex gap-1">
-                    <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                    <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                    <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce"></div>
+                <div className="flex gap-2.5 flex-row">
+                  <div className="flex-none w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center mt-0.5 shadow-sm">
+                    <Bot size={11} className="text-white" />
                   </div>
-                  <span className="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Analysing Zoning Resolution...</span>
+                  <div className="px-3.5 py-3 bg-white border border-slate-100 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce"></div>
+                  </div>
                 </div>
               )}
 
-              {aiSummary && !chatLoading && (
-                <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm prose prose-xs prose-slate max-w-none prose-p:leading-relaxed prose-headings:mb-2 prose-headings:mt-4 prose-li:my-0.5 text-slate-700 animate-in slide-in-from-bottom-2 duration-300">
-                  <ReactMarkdown>{aiSummary}</ReactMarkdown>
-                </div>
-              )}
+              <div ref={chatBottomRef} />
+            </div>
+
+            {/* INPUT BAR */}
+            <div className="p-3 border-t border-slate-100 bg-white no-print">
+              <div className="relative flex items-center gap-2">
+                <input
+                  type="text"
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  placeholder={selectedBBLs.length === 0 ? "Select a lot first, then ask..." : "Ask anything about this lot..."}
+                  className="flex-1 text-xs border border-slate-200 rounded-xl pl-3 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm bg-slate-50 disabled:opacity-50"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && question.trim() && !chatLoading) {
+                      fetchAiSummary(lotData?.zoningDistricts || [], question);
+                    }
+                  }}
+                />
+                <button
+                  onClick={() => fetchAiSummary(lotData?.zoningDistricts || [], question)}
+                  disabled={chatLoading || !question.trim()}
+                  className="bg-blue-600 text-white p-2 rounded-xl hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 transition-colors shadow-sm"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
             </div>
           </div>
         ) : (
@@ -457,6 +703,9 @@ export default function Sidebar() {
                     {/* Assemblage Lot List (Manage Selection) */}
                     {selectedBBLs.length > 1 && (
                       <div className="flex flex-wrap gap-1.5 mt-2 no-print">
+                        <GlossaryTooltip termId="assemblage">
+                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest cursor-help mr-1">Assemblage</span>
+                        </GlossaryTooltip>
                         {selectedBBLs.map(bbl => (
                           <div key={bbl} className="flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md">
                             <span className="text-[9px] font-bold text-slate-500">{bbl}</span>
@@ -478,9 +727,11 @@ export default function Sidebar() {
                         </span>
                       ))}
                       {lotData?.specialDistricts?.length > 0 && (
-                        <span className="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-md text-xs font-bold border border-amber-200 shadow-sm">
-                          Special {lotData.specialDistricts[0]}
-                        </span>
+                        <GlossaryTooltip termId="special_district">
+                          <span className="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-md text-xs font-bold border border-amber-200 shadow-sm cursor-help">
+                            Special {lotData.specialDistricts[0]}
+                          </span>
+                        </GlossaryTooltip>
                       )}
                     </div>
                   </div>
@@ -641,7 +892,9 @@ export default function Sidebar() {
                     <div className="space-y-3">
                       <div className="flex items-center gap-2 text-slate-800 font-bold text-xs px-1">
                         <BookOpen size={14} className="text-blue-600" />
-                        <span>Relevant Rules & Chapters</span>
+                        <GlossaryTooltip termId="zoning_district">
+                          <span className="cursor-help">Relevant Rules & Chapters</span>
+                        </GlossaryTooltip>
                       </div>
                       <div className="grid grid-cols-1 gap-2">
                         {lotData?.zoningDistricts?.some((d: string) => d.startsWith('R')) && (
@@ -676,7 +929,16 @@ export default function Sidebar() {
                 {/* TAB: BUILDER */}
                 {activeTab === 'builder' && (
                   <div className="space-y-6 animate-in fade-in duration-300">
-                    <MassingPreview floors={floorsList} lotArea={lotData?.metadata?.lotArea || 2500} />
+                    <MassingPreview floors={floorsList} lotArea={lotData?.metadata?.lotArea || 2500} massingProfile={massingProfile} />
+
+                    {/* Scenario Comparison */}
+                    <ScenarioComparison
+                      lotArea={lotData?.metadata?.lotArea || 0}
+                      maxResidFAR={parseFloat(lotData?.metadata?.maxResidFAR) || 0}
+                      maxCommFAR={parseFloat(lotData?.metadata?.maxCommFAR) || 0}
+                      currentFloors={floorsList}
+                      zoningDistrict={lotData?.zoningDistricts?.[0] || ""}
+                    />
                     
                     <div className="space-y-6 bg-slate-50/50 p-5 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
                       {/* Decorative background element */}
@@ -812,7 +1074,9 @@ export default function Sidebar() {
                             className={`group flex items-center justify-between p-3 rounded-xl border transition-all ${applyFresh ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm' : 'bg-white border-slate-200 text-slate-400'}`}
                           >
                             <div className="flex flex-col items-start">
-                              <span className="text-[10px] font-black tracking-tighter">FRESH</span>
+                              <GlossaryTooltip termId="fresh">
+                                <span className="text-[10px] font-black tracking-tighter cursor-help">FRESH</span>
+                              </GlossaryTooltip>
                               <span className="text-[8px] opacity-60 font-bold uppercase">Food Store</span>
                             </div>
                             {applyFresh ? <div className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> : <div className="w-2 h-2 bg-slate-100 rounded-full border border-slate-200" />}
@@ -822,12 +1086,46 @@ export default function Sidebar() {
                             className={`group flex items-center justify-between p-3 rounded-xl border transition-all ${applyTransit ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-400'}`}
                           >
                             <div className="flex flex-col items-start">
-                              <span className="text-[10px] font-black tracking-tighter">MIH</span>
+                              <GlossaryTooltip termId="mih">
+                                <span className="text-[10px] font-black tracking-tighter cursor-help">MIH</span>
+                              </GlossaryTooltip>
                               <span className="text-[8px] opacity-60 font-bold uppercase">Incl. Housing</span>
                             </div>
                             {applyTransit ? <div className="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.5)]" /> : <div className="w-2 h-2 bg-slate-100 rounded-full border border-slate-200" />}
                           </button>
                         </div>
+
+                        {/* Wide Street toggle + Shape badge */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setIsWideStreet(!isWideStreet)}
+                            className={`flex-1 flex items-center justify-between p-3 rounded-xl border transition-all ${isWideStreet ? 'bg-violet-50 border-violet-200 text-violet-700 shadow-sm' : 'bg-white border-slate-200 text-slate-400'}`}
+                          >
+                            <div className="flex flex-col items-start">
+                              <span className="text-[10px] font-black tracking-tighter">Wide Street</span>
+                              <span className="text-[8px] opacity-60 font-bold uppercase">≥75 ft</span>
+                            </div>
+                            {isWideStreet ? <div className="w-2 h-2 bg-violet-500 rounded-full shadow-[0_0_8px_rgba(139,92,246,0.5)]" /> : <div className="w-2 h-2 bg-slate-100 rounded-full border border-slate-200" />}
+                          </button>
+
+                          {massingProfile && (
+                            <div
+                              title={massingProfile.shapeDescription}
+                              className="flex flex-col items-center justify-center p-3 rounded-xl border border-indigo-100 bg-indigo-50 min-w-[64px] cursor-help"
+                            >
+                              <span className="text-[14px] font-black text-indigo-700 tracking-tighter leading-none">
+                                {massingProfile.massingShape}
+                              </span>
+                              <span className="text-[7px] font-bold text-indigo-400 uppercase tracking-widest mt-0.5">shape</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {massingProfile && (
+                          <p className="text-[8px] text-slate-400 italic px-1 leading-snug">
+                            Setback kicks in at {massingProfile.baseFloors}F ({massingProfile.baseHeightFt}ft) · {massingProfile.setbackFt}ft step-back required
+                          </p>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-2 gap-6 pt-5 border-t border-slate-100 relative z-10">
@@ -889,6 +1187,58 @@ export default function Sidebar() {
                           </div>
                         )}
                       </div>
+
+                      {/* ── PRO-FORMA LITE ── */}
+                      {totalBuildArea > 0 && lotData?.metadata?.lotArea && (
+                        <div className="pt-4 border-t border-slate-100/80 space-y-3 relative z-10">
+                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest px-1">
+                            💰 Pro-Forma Lite <span className="font-normal normal-case text-slate-300">(rough estimate)</span>
+                          </p>
+                          {(() => {
+                            const resCostPerSF = 350;   // NYC avg residential hard cost $/sf
+                            const commCostPerSF = 420;  // Commercial
+                            const cfCostPerSF = 300;    // Community facility
+                            const totalDevCost =
+                              totalResidArea * resCostPerSF +
+                              totalCommArea * commCostPerSF +
+                              totalCFArea * cfCostPerSF;
+
+                            // Valuation via cap rate
+                            const resRentPerSF = 42;    // $/sf/yr NYC avg rent
+                            const commRentPerSF = 55;
+                            const capRate = 0.045;
+                            const noi = (totalResidArea * resRentPerSF + totalCommArea * commRentPerSF) * 0.7;
+                            const estValue = noi / capRate;
+                            const roi = totalDevCost > 0 ? ((estValue - totalDevCost) / totalDevCost) * 100 : 0;
+
+                            return (
+                              <div className="grid grid-cols-3 gap-2">
+                                <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm space-y-0.5">
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wide">Est. Dev Cost</p>
+                                  <p className="text-xs font-black text-slate-800 tabular-nums">
+                                    ${(totalDevCost / 1_000_000).toFixed(1)}M
+                                  </p>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm space-y-0.5">
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wide">Est. Value</p>
+                                  <p className="text-xs font-black text-emerald-700 tabular-nums">
+                                    ${(estValue / 1_000_000).toFixed(1)}M
+                                  </p>
+                                </div>
+                                <div className={`p-2.5 rounded-xl border shadow-sm space-y-0.5 ${roi >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+                                  <p className={`text-[8px] font-bold uppercase tracking-wide ${roi >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>ROI</p>
+                                  <p className={`text-xs font-black tabular-nums ${roi >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                                    {roi >= 0 ? '+' : ''}{roi.toFixed(0)}%
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                          <p className="text-[7px] text-slate-300 italic px-1">
+                            Based on NYC avg construction costs & 4.5% cap rate. Excludes land, soft costs &amp; financing.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

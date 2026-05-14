@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import * as turf from "@turf/turf";
 import { useZoning } from "@/context/ZoningContext";
+import { computeMassingProfile, computeFloorFootprints } from "@/utils/massingLogic";
 
 export default function Map() {
   const { 
@@ -13,13 +14,15 @@ export default function Map() {
     lotGeometry, setLotGeometry,
     floorsList, setFloorsList,
     floorGeometries,
-    mapMode, setMapMode 
+    mapMode, setMapMode,
+    isWideStreet
   } = useZoning();
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [lng, setLng] = useState(-73.985); 
   const [lat, setLat] = useState(40.7484);
   const [zoom, setZoom] = useState(14);
+  const [showEnvelope, setShowEnvelope] = useState(true);
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
@@ -55,25 +58,23 @@ export default function Map() {
       console.log("MapLibre loaded successfully");
       map.current?.resize();
 
+      // Suppress MapLibre tile loading errors from crashing the Next.js overlay
+      map.current?.on("error", (e) => {
+        // Aggressively ignore AJAX and tile-related fetch errors
+        if (e && e.error && (
+          (typeof e.error.message === 'string' && e.error.message.includes('AJAX')) ||
+          (e.error.status === 0) ||
+          (e.message && e.message.includes('tile'))
+        )) {
+          return; 
+        }
+        // Log other errors but don't re-throw
+        console.warn("MapLibre non-critical error:", e.error || e);
+      });
+
       // Add 3D Buildings context layer (Optional NYC footprints if available)
       // For now, focus on the selected lot extrusion
       
-      // Add NYC Zoning Districts Layer
-      map.current?.addSource('zoning-districts', {
-        type: 'raster',
-        tiles: [
-          'https://tiles.arcgis.com/tiles/yG5s3afENB5iO9Jp/arcgis/rest/services/ZoningDistrict/MapServer/export?bbox={bbox-epsg-3857}&size=256,256&format=png32&transparent=true&f=image'
-        ],
-        tileSize: 256
-      });
-
-      map.current?.addLayer({
-        id: 'zoning-districts-layer',
-        type: 'raster',
-        source: 'zoning-districts',
-        paint: { 'raster-opacity': 0.4 }
-      });
-
       // Add Global Tax Lots (Vector)
       map.current?.addSource('tax-lots', {
         type: 'vector',
@@ -230,23 +231,48 @@ export default function Map() {
     };
   }, []);
 
+  // Compute massing profile (memoized — only changes when lot/district changes)
+  const massingProfile = useMemo(() => {
+    if (!lotData || !lotGeometry) return null;
+    const lotFrontFt = parseFloat(lotData.metadata?.lotFront) || Math.sqrt(parseFloat(lotData.metadata?.lotArea) || 2500);
+    const lotDepthFt = parseFloat(lotData.metadata?.lotDepth) || lotFrontFt;
+    const district = lotData.zoningDistricts?.[0] || 'R6';
+    return computeMassingProfile({
+      zoningDistrict: district,
+      lotFrontFt,
+      lotDepthFt,
+      isWideStreet: isWideStreet ?? false,
+    });
+  }, [lotData, lotGeometry, isWideStreet]);
+
   // Generate Stacked 3D Building Extrusion
   useEffect(() => {
     if (!map.current || !lotGeometry) return;
 
+    // Compute setback-aware footprints per floor
+    const effectiveFootprints = massingProfile
+      ? computeFloorFootprints({
+          floors: floorsList,
+          lotGeometry,
+          floorGeometries,
+          profile: massingProfile,
+        })
+      : {};
+
     const features = floorsList.map((floor, index) => {
-      const baseHeight = index * 3.5; // 3.5m per floor
-      const height = (index + 1) * 3.5;
+      const baseHeight = index * 3.048; // 10ft per floor in meters
+      const height = (index + 1) * 3.048;
       const colorMap: Record<string, string> = {
         residential: '#facc15',
         commercial: '#ef4444',
         community_facility: '#3b82f6'
       };
       const color = colorMap[floor.use] || colorMap.residential;
+      const footprint = effectiveFootprints[floor.id] || floorGeometries[floor.id] || lotGeometry;
       
       return {
         type: "Feature",
-        geometry: floorGeometries[floor.id] || lotGeometry,
+        geometry: footprint,
         properties: {
           base_height: baseHeight,
           height: height,
@@ -287,13 +313,13 @@ export default function Map() {
   // Handle 2D/3D Mode
   useEffect(() => {
     if (!map.current) return;
-    if (mapMode === "3D") {
+    if (mapMode === '3D') {
       map.current.easeTo({ pitch: 55, bearing: -15, duration: 1000 });
       if (map.current.getLayer('proposed-building')) {
         map.current.setLayoutProperty('proposed-building', 'visibility', 'visible');
       }
       if (map.current.getLayer('building-envelope')) {
-        map.current.setLayoutProperty('building-envelope', 'visibility', 'visible');
+        map.current.setLayoutProperty('building-envelope', 'visibility', showEnvelope ? 'visible' : 'none');
       }
     } else {
       map.current.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
@@ -304,7 +330,15 @@ export default function Map() {
         map.current.setLayoutProperty('building-envelope', 'visibility', 'none');
       }
     }
-  }, [mapMode]);
+  }, [mapMode, showEnvelope]);
+
+  // Toggle envelope visibility independently
+  useEffect(() => {
+    if (!map.current || mapMode !== '3D') return;
+    if (map.current.getLayer('building-envelope')) {
+      map.current.setLayoutProperty('building-envelope', 'visibility', showEnvelope ? 'visible' : 'none');
+    }
+  }, [showEnvelope]);
 
   useEffect(() => {
     if (!map.current || selectedBBLs.length === 0) {
@@ -373,6 +407,19 @@ export default function Map() {
           <div className={`w-2 h-2 rounded-full ${mapMode === '3D' ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-slate-300'}`} />
           {mapMode} Mode
         </button>
+        {mapMode === '3D' && (
+          <button
+            onClick={() => setShowEnvelope(v => !v)}
+            className={`backdrop-blur px-4 py-2 rounded-xl shadow-xl text-[10px] font-black border transition-all active:scale-95 uppercase tracking-widest flex items-center gap-2 ${
+              showEnvelope
+                ? 'bg-cyan-50/95 text-cyan-700 border-cyan-200 hover:bg-cyan-100'
+                : 'bg-white/95 text-slate-400 border-slate-200 hover:bg-white'
+            }`}
+          >
+            <div className={`w-2 h-2 rounded-full ${showEnvelope ? 'bg-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.5)]' : 'bg-slate-300'}`} />
+            Envelope
+          </button>
+        )}
       </div>
 
       <div className="absolute top-4 right-4 bg-white/95 backdrop-blur px-3 py-1.5 rounded-full shadow-lg text-[10px] font-bold text-slate-600 z-10 border border-slate-200 pointer-events-none no-print">

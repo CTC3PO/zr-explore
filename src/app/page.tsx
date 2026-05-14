@@ -4,14 +4,25 @@ import { useState, useEffect, useRef } from "react";
 import Map from "@/components/Map";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
-import { Menu, X, ChevronUp, ChevronDown } from "lucide-react";
+import { DiscoveryWizard } from "@/components/DiscoveryWizard";
+import { Menu, X, ChevronUp, ChevronDown, HelpCircle } from "lucide-react";
 import { useZoning } from "@/context/ZoningContext";
 
 export default function Home() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(384);
+  const [showWizard, setShowWizard] = useState(false);
   const isResizing = useRef(false);
   const { selectedBBLs } = useZoning();
+
+  // Show the wizard on first visit only
+  useEffect(() => {
+    const hasSeenWizard = localStorage.getItem('zr-explore-wizard-seen');
+    if (!hasSeenWizard) {
+      setShowWizard(true);
+      localStorage.setItem('zr-explore-wizard-seen', 'true');
+    }
+  }, []);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -40,6 +51,18 @@ export default function Home() {
   return (
     <main className="flex flex-col md:flex-row h-screen w-full overflow-hidden relative bg-slate-50">
       <Header />
+
+      {/* Discovery Wizard Overlay */}
+      {showWizard && <DiscoveryWizard onClose={() => setShowWizard(false)} />}
+
+      {/* Help Button — always accessible to re-open wizard */}
+      <button
+        onClick={() => setShowWizard(true)}
+        title="Open Getting Started Guide"
+        className="fixed bottom-6 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg shadow-blue-500/30 transition-all hover:scale-110 active:scale-95 no-print"
+      >
+        <HelpCircle size={20} />
+      </button>
 
       {/* DESKTOP SIDEBAR / MOBILE BOTTOM PANEL */}
       <div 
@@ -83,14 +106,29 @@ export default function Home() {
       `}>
         <Map />
         
-        {/* Welcome message when no lot selected */}
+        {/* Welcome overlay when no lot selected */}
         {selectedBBLs.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none p-6">
-            <div className="bg-white/90 backdrop-blur-md p-6 rounded-3xl border border-white shadow-2xl text-center max-w-sm">
-              <h2 className="text-xl font-bold text-slate-800 mb-2">Welcome to ZR-Explore</h2>
-              <p className="text-sm text-slate-500 leading-relaxed">
-                Search for an address or click directly on the map to begin your zoning discovery.
-              </p>
+            <div className="bg-white/92 backdrop-blur-md rounded-3xl border border-white/80 shadow-2xl text-center max-w-xs overflow-hidden">
+              <div className="px-6 pt-6 pb-4">
+                <div className="text-2xl mb-2">🗺️</div>
+                <h2 className="text-base font-black text-slate-800 mb-1">Welcome to ZR-Explore</h2>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Click any lot on the map or search an address to begin.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 border-t border-slate-100">
+                {[
+                  { icon: "📍", label: "Zoning Data" },
+                  { icon: "🏗️", label: "3D Builder" },
+                  { icon: "🤖", label: "AI Consult" },
+                ].map(f => (
+                  <div key={f.label} className="py-3 flex flex-col items-center gap-0.5 border-r border-slate-100 last:border-r-0">
+                    <span className="text-base">{f.icon}</span>
+                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-wide">{f.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}

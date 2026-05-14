@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     // Table 'mappluto' contains the most up-to-date lot-level zoning info
     const query = `
       SELECT 
-        bbl, address, numfloors, bldgarea, lotarea, 
+        bbl, address, numfloors, bldgarea, lotarea, lotfront, lotdepth, yearbuilt,
         zonedist1, zonedist2, zonedist3, 
         overlay1, overlay2, 
         spdist1, spdist2,
@@ -55,9 +55,12 @@ export async function GET(request: Request) {
         lot: lot.lot
       },
       metadata: {
-        floors: lot.numfloors,
+        numFloors: lot.numfloors,
         bldgArea: lot.bldgarea,
         lotArea: lot.lotarea,
+        lotFront: lot.lotfront,   // ft — lot width facing street
+        lotDepth: lot.lotdepth,   // ft — lot depth from street
+        yearBuilt: lot.yearbuilt,
         maxResidFAR: lot.residfar,
         maxCommFAR: lot.commfar,
         maxFacilFAR: lot.facilfar,
